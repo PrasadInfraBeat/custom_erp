@@ -1,0 +1,311 @@
+{
+  "name": "Customer Feedback",
+  "module": "CRM",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "naming_rule": "By naming series",
+  "autoname": "naming_series:",
+  "creation": "2024-01-01 00:00:00.000000",
+  "modified": "2024-01-01 00:00:00.000000",
+  "modified_by": "Administrator",
+  "owner": "Administrator",
+  "is_submittable": 1,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "quick_entry": 0,
+  "editable_grid": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": "customer_name",
+  "fields": [
+    {
+      "fieldname": "naming_series",
+      "fieldtype": "Select",
+      "label": "Series",
+      "options": "CF-.YYYY.-",
+      "reqd": 1,
+      "in_list_view": 0,
+      "no_copy": 1,
+      "set_only_once": 1
+    },
+    {
+      "fieldname": "customer",
+      "fieldtype": "Link",
+      "label": "Customer",
+      "options": "Customer",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "customer_name",
+      "fieldtype": "Data",
+      "label": "Customer Name",
+      "fetch_from": "customer.customer_name",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "feedback_date",
+      "fieldtype": "Date",
+      "label": "Feedback Date",
+      "reqd": 1,
+      "default": "Today",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "feedback_source",
+      "fieldtype": "Select",
+      "label": "Feedback Source",
+      "options": "\nEmail\nPhone Call\nIn Person\nWebsite\nSocial Media\nSurvey\nOther",
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "section_break_rating",
+      "fieldtype": "Section Break",
+      "label": "Rating Details"
+    },
+    {
+      "fieldname": "overall_rating",
+      "fieldtype": "Rating",
+      "label": "Overall Rating",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "product_quality_rating",
+      "fieldtype": "Rating",
+      "label": "Product Quality Rating"
+    },
+    {
+      "fieldname": "column_break_2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "service_rating",
+      "fieldtype": "Rating",
+      "label": "Service Rating"
+    },
+    {
+      "fieldname": "value_for_money_rating",
+      "fieldtype": "Rating",
+      "label": "Value for Money Rating"
+    },
+    {
+      "fieldname": "section_break_reference",
+      "fieldtype": "Section Break",
+      "label": "Reference"
+    },
+    {
+      "fieldname": "reference_doctype",
+      "fieldtype": "Link",
+      "label": "Reference Document Type",
+      "options": "DocType"
+    },
+    {
+      "fieldname": "reference_name",
+      "fieldtype": "Dynamic Link",
+      "label": "Reference Document",
+      "options": "reference_doctype"
+    },
+    {
+      "fieldname": "column_break_3",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "contact_person",
+      "fieldtype": "Link",
+      "label": "Contact Person",
+      "options": "Contact"
+    },
+    {
+      "fieldname": "contact_email",
+      "fieldtype": "Data",
+      "label": "Contact Email",
+      "options": "Email"
+    },
+    {
+      "fieldname": "section_break_feedback",
+      "fieldtype": "Section Break",
+      "label": "Feedback Details"
+    },
+    {
+      "fieldname": "feedback_category",
+      "fieldtype": "Select",
+      "label": "Feedback Category",
+      "options": "\nProduct\nService\nDelivery\nPricing\nSupport\nGeneral\nComplaint\nSuggestion\nCompliment",
+      "reqd": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "feedback_subject",
+      "fieldtype": "Data",
+      "label": "Subject",
+      "reqd": 1
+    },
+    {
+      "fieldname": "feedback_comments",
+      "fieldtype": "Text Editor",
+      "label": "Feedback Comments",
+      "reqd": 1
+    },
+    {
+      "fieldname": "section_break_response",
+      "fieldtype": "Section Break",
+      "label": "Response",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "response_required",
+      "fieldtype": "Check",
+      "label": "Response Required",
+      "default": 0
+    },
+    {
+      "fieldname": "response_status",
+      "fieldtype": "Select",
+      "label": "Response Status",
+      "options": "\nPending\nIn Progress\nResponded\nClosed",
+      "in_standard_filter": 1,
+      "depends_on": "response_required"
+    },
+    {
+      "fieldname": "column_break_4",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "assigned_to",
+      "fieldtype": "Link",
+      "label": "Assigned To",
+      "options": "User",
+      "depends_on": "response_required"
+    },
+    {
+      "fieldname": "response_date",
+      "fieldtype": "Date",
+      "label": "Response Date",
+      "depends_on": "response_required"
+    },
+    {
+      "fieldname": "response_comments",
+      "fieldtype": "Text Editor",
+      "label": "Response Comments",
+      "depends_on": "response_required"
+    },
+    {
+      "fieldname": "section_break_additional",
+      "fieldtype": "Section Break",
+      "label": "Additional Information",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "would_recommend",
+      "fieldtype": "Select",
+      "label": "Would Recommend",
+      "options": "\nYes\nNo\nMaybe"
+    },
+    {
+      "fieldname": "is_repeat_customer",
+      "fieldtype": "Check",
+      "label": "Is Repeat Customer",
+      "default": 0
+    },
+    {
+      "fieldname": "column_break_5",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "attachments",
+      "fieldtype": "Attach",
+      "label": "Attachments"
+    },
+    {
+      "fieldname": "tags",
+      "fieldtype": "Small Text",
+      "label": "Tags"
+    },
+    {
+      "fieldname": "section_break_amended",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "amended_from",
+      "fieldtype": "Link",
+      "label": "Amended From",
+      "options": "Customer Feedback",
+      "read_only": 1,
+      "no_copy": 1,
+      "print_hide": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "Sales Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1,
+      "share": 1
+    },
+    {
+      "role": "Sales User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "submit": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "Support Team",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "submit": 1,
+      "report": 1,
+      "print": 1
+    }
+  ],
+  "states": [
+    {
+      "title": "Pending",
+      "color": "orange"
+    },
+    {
+      "title": "Reviewed",
+      "color": "blue"
+    },
+    {
+      "title": "Actioned",
+      "color": "green"
+    },
+    {
+      "title": "Closed",
+      "color": "gray"
+    }
+  ],
+  "actions": [],
+  "links": [
+    {
+      "link_doctype": "Customer",
+      "link_fieldname": "customer",
+      "group": "Customer"
+    }
+  ],
+  "custom": 0,
+  "istable": 0,
+  "issingle": 0
+}
