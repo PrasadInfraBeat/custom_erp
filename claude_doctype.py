@@ -1,38 +1,218 @@
-import anthropic
+"""
+Claude AI DocType Generator for custom_erp
+============================================
+Generates complete Frappe DocTypes using Claude AI.
+Creates JSON, Python controller, JS client script, and test files.
+Auto-installs on site, commits to git, and pushes to GitHub.
+"""
+
 import os
 import json
 import re
+import subprocess
+import sys
+from pathlib import Path
 
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+try:
+    import anthropic
+except ImportError:
+    print("ERROR: 'anthropic' package not installed.")
+    print("Install with: ./env/bin/pip install anthropic")
+    sys.exit(1)
 
-def generate_doctype(doctype_name, description):
-    print("Asking Claude to generate DocType: " + doctype_name)
-    message = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=2000,
-        messages=[{
-            "role": "user",
-            "content": "You are a Frappe/ERPNext expert. Generate a complete DocType JSON for: " + doctype_name + ". Description: " + description + ". Return ONLY valid JSON, no markdown, no code blocks, no explanation."
-        }]
+
+# Configuration
+APP_PATH = Path("/home/frappe/frappe-bench/apps/custom_erp/custom_erp")
+DOCTYPE_BASE = APP_PATH / "doctype"
+SITE_NAME = "erp.local"
+BENCH_PATH = Path("/home/frappe/frappe-bench")
+CLAUDE_MODEL = "claude-opus-4-7"
+MAX_TOKENS = 4000
+
+
+def get_client():
+    """Initialize Claude AI client."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("ERROR: ANTHROPIC_API_KEY environment variable not set.")
+        print("Set it in ~/.bashrc:")
+        print('  export ANTHROPIC_API_KEY="sk-ant-..."')
+        sys.exit(1)
+    return anthropic.Anthropic(api_key=api_key)
+
+
+def claude_generate_doctype(client, doctype_name, description):
+    """Ask Claude to generate complete DocType JSON."""
+    print("\n[CLAUDE] Asking Claude to generate DocType: " + doctype_name)
+
+    prompt = (
+        "You are a Frappe/ERPNext v15 expert. Generate a COMPLETE valid DocType JSON for:\n\n"
+        "Name: " + doctype_name + "\n"
+        "Description: " + description + "\n\n"
+        "Requirements:\n"
+        "1. Return ONLY valid JSON, no markdown, no code blocks, no explanation\n"
+        "2. Include all required Frappe fields: doctype, name, module, fields, permissions\n"
+        "3. Use module name 'Custom Erp'\n"
+        "4. Set 'custom': 0\n"
+        "5. Use proper fieldtypes (Data, Link, Date, Datetime, Check, Small Text, Long Text, Select, Currency, Int, Float, Table)\n"
+        "6. Add reasonable permissions for System Manager, Sales User\n"
+        "7. Set autoname appropriately\n"
+        "8. Add a title_field if applicable\n"
+        "9. Add proper labels for all fields\n\n"
+        "Return only the JSON object."
     )
+
+    message = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=MAX_TOKENS,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
     response = message.content[0].text.strip()
-    response = re.sub(r"```json|```", "", response).strip()
+    response = re.sub(r"^```json\s*|^```\s*|```\s*$", "", response, flags=re.MULTILINE).strip()
+
     try:
-        doctype_json = json.loads(response)
-        safe_name = doctype_name.lower().replace(" ", "_")
-        folder = "/home/frappe/frappe-bench/apps/custom_erp/custom_erp/doctype/" + safe_name
-        os.makedirs(folder, exist_ok=True)
-        filename = folder + "/" + safe_name + ".json"
-        with open(filename, "w") as f:
-            json.dump(doctype_json, f, indent=2)
-        print("Saved to " + filename)
+        return json.loads(response)
     except json.JSONDecodeError as e:
-        print("JSON parse error: " + str(e))
-        print("Raw response saved to /tmp/claude_response.txt")
-        with open("/tmp/claude_response.txt", "w") as f:
+        print("[ERROR] JSON parse error: " + str(e))
+        debug_file = "/tmp/claude_response.txt"
+        with open(debug_file, "w") as f:
             f.write(response)
+        print("[DEBUG] Raw response saved to " + debug_file)
+        sys.exit(1)
+
+
+def write_doctype_files(doctype_name, doctype_json):
+    """Write the DocType JSON, Python controller, JS, and test files."""
+    safe_name = doctype_name.lower().replace(" ", "_")
+    folder = DOCTYPE_BASE / safe_name
+    folder.mkdir(parents=True, exist_ok=True)
+
+    # 1. Write the JSON file
+    json_file = folder / (safe_name + ".json")
+    with open(json_file, "w") as f:
+        json.dump(doctype_json, f, indent=2)
+    print("[FILE] " + str(json_file))
+
+    # 2. Write empty __init__.py
+    init_file = folder / "__init__.py"
+    init_file.touch()
+    print("[FILE] " + str(init_file))
+
+    # 3. Write Python controller
+    py_file = folder / (safe_name + ".py")
+    class_name = doctype_name.replace(" ", "")
+    py_content = (
+        "# Copyright (c) 2026, PrasadInfraBeat and contributors\n"
+        "# For license information, please see license.txt\n\n"
+        "# import frappe\n"
+        "from frappe.model.document import Document\n\n\n"
+        "class " + class_name + "(Document):\n"
+        '    """Auto-generated by Claude AI."""\n'
+        "    pass\n"
+    )
+    with open(py_file, "w") as f:
+        f.write(py_content)
+    print("[FILE] " + str(py_file))
+
+    # 4. Write JS client script
+    js_file = folder / (safe_name + ".js")
+    js_content = (
+        "// Copyright (c) 2026, PrasadInfraBeat and contributors\n"
+        "// For license information, please see license.txt\n\n"
+        'frappe.ui.form.on("' + doctype_name + '", {\n'
+        "    refresh(frm) {\n"
+        "        // Add custom logic here\n"
+        "    },\n"
+        "});\n"
+    )
+    with open(js_file, "w") as f:
+        f.write(js_content)
+    print("[FILE] " + str(js_file))
+
+    # 5. Write test file
+    test_file = folder / ("test_" + safe_name + ".py")
+    test_content = (
+        "# Copyright (c) 2026, PrasadInfraBeat and contributors\n"
+        "# See license.txt\n\n"
+        "from frappe.tests.utils import FrappeTestCase\n\n\n"
+        "class Test" + class_name + "(FrappeTestCase):\n"
+        '    """Auto-generated test."""\n'
+        "    pass\n"
+    )
+    with open(test_file, "w") as f:
+        f.write(test_content)
+    print("[FILE] " + str(test_file))
+
+    return folder
+
+
+def run_bench_migrate():
+    """Run bench migrate to install the new DocType."""
+    print("\n[BENCH] Running migrate to install DocType...")
+    result = subprocess.run(
+        ["bench", "--site", SITE_NAME, "migrate"],
+        cwd=BENCH_PATH,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        print("[BENCH] Migration successful!")
+        return True
+    else:
+        print("[ERROR] Migration failed:\n" + result.stderr)
+        return False
+
+
+def git_commit_and_push(doctype_name):
+    """Commit changes and push to dev branch."""
+    repo_path = APP_PATH.parent
+    print("\n[GIT] Committing and pushing to dev branch...")
+
+    commands = [
+        ["git", "add", "."],
+        ["git", "commit", "-m", "feat: add " + doctype_name + " DocType (auto-generated by Claude AI)"],
+        ["git", "push", "origin", "dev"],
+    ]
+
+    for cmd in commands:
+        result = subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True)
+        if result.returncode != 0 and "nothing to commit" not in result.stdout:
+            print("[GIT WARN] " + " ".join(cmd) + ": " + result.stderr)
+        else:
+            print("[GIT] " + " ".join(cmd) + ": OK")
+
+    print("[GIT] Done — check GitHub for the new commit.")
+
+
+def generate_doctype(doctype_name, description, auto_install=True, auto_push=True):
+    """Main function — generates a complete DocType end-to-end."""
+    print("=" * 60)
+    print("Claude AI DocType Generator")
+    print("Target: " + doctype_name)
+    print("=" * 60)
+
+    client = get_client()
+    doctype_json = claude_generate_doctype(client, doctype_name, description)
+    folder = write_doctype_files(doctype_name, doctype_json)
+
+    print("\n[OK] All files written to: " + str(folder))
+
+    if auto_install:
+        if run_bench_migrate():
+            url_name = doctype_name.lower().replace(" ", "-")
+            print("\n[OK] DocType is now live at: http://10.1.0.184/app/" + url_name)
+
+    if auto_push:
+        git_commit_and_push(doctype_name)
+
+    print("\n" + "=" * 60)
+    print("DONE!")
+    print("=" * 60)
+
 
 if __name__ == "__main__":
-    doctype_name = input("Enter DocType name: ")
-    description = input("Describe the DocType: ")
-    generate_doctype(doctype_name, description)
+    print("\n--- Claude AI DocType Generator ---\n")
+    name = input("Enter DocType name (e.g., 'Customer Visit'): ").strip()
+    desc = input("Describe the DocType + fields: ").strip()
+    generate_doctype(name, desc)

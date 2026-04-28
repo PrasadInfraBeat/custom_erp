@@ -1,0 +1,105 @@
+{
+  "doctype": "DocType",
+  "name": "Customer Visit",
+  "module": "Custom Erp",
+  "custom": 0,
+  "autoname": "naming_series:",
+  "naming_series": "CV-.YYYY.-.#####",
+  "title_field": "customer",
+  "track_changes": 1,
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "fields": [
+    {
+      "fieldname": "naming_series",
+      "label": "Series",
+      "fieldtype": "Select",
+      "options": "CV-.YYYY.-.#####",
+      "reqd": 1,
+      "default": "CV-.YYYY.-.#####"
+    },
+    {
+      "fieldname": "visit_date",
+      "label": "Visit Date",
+      "fieldtype": "Date",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "customer",
+      "label": "Customer",
+      "fieldtype": "Link",
+      "options": "Customer",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "follow_up_required",
+      "label": "Follow Up Required",
+      "fieldtype": "Check",
+      "default": "0",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "section_break_details",
+      "label": "Details",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "purpose",
+      "label": "Purpose",
+      "fieldtype": "Small Text"
+    },
+    {
+      "fieldname": "notes",
+      "label": "Notes",
+      "fieldtype": "Long Text"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "import": 1,
+      "share": 1,
+      "print": 1,
+      "email": 1
+    },
+    {
+      "role": "Sales User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "report": 1,
+      "export": 1,
+      "share": 1,
+      "print": 1,
+      "email": 1
+    },
+    {
+      "role": "Sales Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "share": 1,
+      "print": 1,
+      "email": 1
+    }
+  ]
+}
