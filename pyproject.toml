@@ -1,9 +1,9 @@
 [project]
 name = "custom_erp"
 authors = [
-    { name = "InfraBeat", email = "pganegaonkar@gmail.com"}
+    { name = "Prasad Ganegaonkar", email = "pganegaonkar@gmail.com"}
 ]
-description = "InfraBeat ERPNext"
+description = "Custom ERPNext Automation By Prasad InfraBeat"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]

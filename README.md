@@ -1,6 +1,6 @@
-### Custom Erp
+### Custom ERP
 
-InfraBeat ERPNext
+Custom ERPNext Automation By Prasad InfraBeat
 
 ### Installation
 

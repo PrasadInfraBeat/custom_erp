@@ -1,7 +1,7 @@
 app_name = "custom_erp"
-app_title = "Custom Erp"
-app_publisher = "InfraBeat"
-app_description = "InfraBeat ERPNext"
+app_title = "Custom ERP"
+app_publisher = "Prasad Ganegaonkar"
+app_description = "Custom ERPNext Automation By Prasad InfraBeat"
 app_email = "pganegaonkar@gmail.com"
 app_license = "mit"
 
@@ -15,7 +15,7 @@ app_license = "mit"
 # 	{
 # 		"name": "custom_erp",
 # 		"logo": "/assets/custom_erp/logo.png",
-# 		"title": "Custom Erp",
+# 		"title": "Custom ERP",
 # 		"route": "/custom_erp",
 # 		"has_permission": "custom_erp.api.permission.has_app_permission"
 # 	}
