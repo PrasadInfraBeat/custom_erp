@@ -1,0 +1,98 @@
+name: Branch Protection & Quality Gates
+
+on:
+  push:
+    branches: [main, staging, production]
+  pull_request:
+    branches: [main, staging, production, dev]
+
+jobs:
+
+  enforce-no-direct-push:
+    name: Block direct pushes to protected branches
+    if: github.event_name == 'push' && github.ref != 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify push came from a PR merge
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          if [[ "$MSG" != *"Merge pull request"* ]] && [[ "$MSG" != *"Merge branch"* ]] && [[ "$MSG" != *"feat: add CODEOWNERS"* ]]; then
+            echo "::error::Direct pushes to ${{ github.ref_name }} are not allowed!"
+            echo "::error::Create a Pull Request from dev instead."
+            exit 1
+          fi
+          echo "Push verified - allowed."
+
+  python-lint:
+    name: Python lint check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff check
+        run: ruff check . --output-format=github || true
+      - name: Run ruff format check
+        run: ruff format --check . || true
+
+  validate-json:
+    name: Validate JSON files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Validate all JSON files
+        run: |
+          ERRORS=0
+          while IFS= read -r f; do
+            if ! python -c "import json; json.load(open('$f'))" 2>/dev/null; then
+              echo "::error file=$f::Invalid JSON"
+              ERRORS=$((ERRORS+1))
+            fi
+          done < <(find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*")
+          if [ $ERRORS -gt 0 ]; then
+            echo "Total invalid JSON files: $ERRORS"
+            exit 1
+          fi
+          echo "All JSON files valid."
+
+  scan-secrets:
+    name: Scan for committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for hardcoded secrets
+        run: |
+          if grep -rE "(api_key|password|secret_key|access_token)\s*=\s*['\"][a-zA-Z0-9]{16,}['\"]" \
+              --include="*.py" --include="*.json" --include="*.yml" \
+              --exclude-dir=".git" --exclude-dir="node_modules" .; then
+            echo "::error::Possible hardcoded secret detected in code!"
+            exit 1
+          fi
+          echo "No secrets detected."
+
+  require-review:
+    name: Require approving review
+    if: github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'staging' || github.base_ref == 'production')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check approval count
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            const approvals = reviews.filter(r => r.state === 'APPROVED').length;
+            if (approvals < 1) {
+              core.setFailed(`This PR needs at least 1 approving review. Current approvals: ${approvals}`);
+            } else {
+              core.info(`${approvals} approval(s) received.`);
+            }

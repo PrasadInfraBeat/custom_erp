@@ -1,0 +1,20 @@
+# CODEOWNERS for custom_erp
+# When a PR touches a matching file, listed owners are auto-requested for review.
+
+# Default: Prasad reviews everything
+*                                  @PrasadInfraBeat
+
+# Critical files: require explicit review
+/hooks.py                          @PrasadInfraBeat
+/custom_erp/hooks.py               @PrasadInfraBeat
+/custom_erp/modules.txt            @PrasadInfraBeat
+/pyproject.toml                    @PrasadInfraBeat
+
+# DocType definitions: require review (these change DB schema)
+/custom_erp/**/doctype/**          @PrasadInfraBeat
+
+# Workflows: require strict review
+/.github/workflows/**              @PrasadInfraBeat
+
+# Production deploy scripts
+/deploy/**                         @PrasadInfraBeat
