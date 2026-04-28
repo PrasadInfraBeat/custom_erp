@@ -3,21 +3,27 @@
   "name": "Customer Visit",
   "module": "Custom Erp",
   "custom": 0,
-  "autoname": "format:CV-{YYYY}-{#####}",
+  "autoname": "naming_series:",
+  "naming_series": "CV-.YYYY.-.#####",
   "title_field": "customer",
-  "naming_rule": "Expression",
   "track_changes": 1,
   "engine": "InnoDB",
-  "sort_field": "modified",
-  "sort_order": "DESC",
   "fields": [
+    {
+      "fieldname": "naming_series",
+      "label": "Series",
+      "fieldtype": "Select",
+      "options": "CV-.YYYY.-.#####",
+      "reqd": 1,
+      "default": "CV-.YYYY.-.#####"
+    },
     {
       "fieldname": "visit_date",
       "label": "Visit Date",
       "fieldtype": "Date",
       "reqd": 1,
       "in_list_view": 1,
-      "in_standard_filter": 1
+      "default": "Today"
     },
     {
       "fieldname": "customer",
@@ -40,14 +46,15 @@
       "in_list_view": 1
     },
     {
-      "fieldname": "section_break_details",
-      "label": "Visit Details",
-      "fieldtype": "Section Break"
+      "fieldname": "section_break_1",
+      "fieldtype": "Section Break",
+      "label": "Visit Details"
     },
     {
       "fieldname": "purpose",
       "label": "Purpose",
-      "fieldtype": "Small Text"
+      "fieldtype": "Small Text",
+      "reqd": 0
     },
     {
       "fieldname": "notes",
@@ -62,6 +69,9 @@
       "write": 1,
       "create": 1,
       "delete": 1,
+      "submit": 0,
+      "cancel": 0,
+      "amend": 0,
       "report": 1,
       "export": 1,
       "import": 1,
@@ -80,6 +90,23 @@
       "share": 1,
       "print": 1,
       "email": 1
+    },
+    {
+      "role": "Sales Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "share": 1,
+      "print": 1,
+      "email": 1
     }
-  ]
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "is_submittable": 0,
+  "quick_entry": 1,
+  "allow_rename": 1
 }
