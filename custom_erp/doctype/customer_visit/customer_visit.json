@@ -3,22 +3,14 @@
   "name": "Customer Visit",
   "module": "Custom Erp",
   "custom": 0,
-  "autoname": "naming_series:",
-  "naming_series": "CV-.YYYY.-.#####",
+  "autoname": "format:CV-{YYYY}-{#####}",
   "title_field": "customer",
+  "naming_rule": "Expression",
   "track_changes": 1,
   "engine": "InnoDB",
   "sort_field": "modified",
   "sort_order": "DESC",
   "fields": [
-    {
-      "fieldname": "naming_series",
-      "label": "Series",
-      "fieldtype": "Select",
-      "options": "CV-.YYYY.-.#####",
-      "reqd": 1,
-      "default": "CV-.YYYY.-.#####"
-    },
     {
       "fieldname": "visit_date",
       "label": "Visit Date",
@@ -49,7 +41,7 @@
     },
     {
       "fieldname": "section_break_details",
-      "label": "Details",
+      "label": "Visit Details",
       "fieldtype": "Section Break"
     },
     {
@@ -83,18 +75,6 @@
       "write": 1,
       "create": 1,
       "delete": 0,
-      "report": 1,
-      "export": 1,
-      "share": 1,
-      "print": 1,
-      "email": 1
-    },
-    {
-      "role": "Sales Manager",
-      "read": 1,
-      "write": 1,
-      "create": 1,
-      "delete": 1,
       "report": 1,
       "export": 1,
       "share": 1,
