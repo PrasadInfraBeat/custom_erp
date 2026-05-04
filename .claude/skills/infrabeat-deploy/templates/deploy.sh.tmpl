@@ -1,0 +1,109 @@
+#!/bin/bash
+# infrabeat-deploy generated script
+# Target:    {{TARGET_ENV}} VM ({{VM_IP}})
+# Branch:    {{BRANCH}} on apps/custom_erp
+# Site:      {{SITE}}
+# Bench:     {{BENCH_PATH}} (run as {{BENCH_USER}})
+# Generated: {{TIMESTAMP}}
+#
+# Idempotent. Safe to re-run. Will report "already up to date" cleanly
+# when no new commits.
+
+set -euo pipefail
+
+BENCH={{BENCH_PATH}}
+SITE={{SITE}}
+APP=custom_erp
+BRANCH={{BRANCH}}
+TARGET={{TARGET_ENV}}
+
+echo "===== infrabeat-deploy: ${TARGET} ====="
+echo "Bench:  ${BENCH}"
+echo "Site:   ${SITE}"
+echo "Branch: ${BRANCH}"
+echo "User:   $(whoami)"
+echo "Time:   $(date -Iseconds)"
+echo
+
+# ---------------------------------------------------------------------------
+# Phase A: switch to bench user if not already
+# Dev VM ssh_user=erpadmin, bench_user=frappe -> need sudo su.
+# Staging/prod ssh_user=erpadmin, bench_user=erpadmin -> already correct.
+# ---------------------------------------------------------------------------
+if [ "$(whoami)" != "{{BENCH_USER}}" ]; then
+    echo "Switching to {{BENCH_USER}} via sudo..."
+    # Re-exec the rest of this script as bench user
+    sudo -u {{BENCH_USER}} bash -s <<'INNER_SCRIPT'
+BENCH={{BENCH_PATH}}
+SITE={{SITE}}
+APP=custom_erp
+BRANCH={{BRANCH}}
+INNER_BODY_PLACEHOLDER
+INNER_SCRIPT
+    exit $?
+fi
+
+# ---------------------------------------------------------------------------
+# Phase B: run as bench user (or directly if already that user)
+# ---------------------------------------------------------------------------
+
+cd "${BENCH}/apps/${APP}"
+
+echo "----- Phase B.1: record before-state -----"
+BEFORE_BRANCH=$(git branch --show-current)
+BEFORE_HEAD=$(git rev-parse --short HEAD)
+BEFORE_HEAD_FULL=$(git rev-parse HEAD)
+echo "BEFORE_BRANCH=${BEFORE_BRANCH}"
+echo "BEFORE_HEAD=${BEFORE_HEAD}"
+echo "BEFORE_HEAD_FULL=${BEFORE_HEAD_FULL}"
+
+echo "----- Phase B.2: ensure on target branch -----"
+git fetch origin "${BRANCH}"
+if [ "${BEFORE_BRANCH}" != "${BRANCH}" ]; then
+    echo "Switching from ${BEFORE_BRANCH} to ${BRANCH}"
+    git checkout "${BRANCH}"
+fi
+
+echo "----- Phase B.3: pull latest -----"
+git pull --ff-only origin "${BRANCH}"
+
+AFTER_HEAD=$(git rev-parse --short HEAD)
+echo "AFTER_HEAD=${AFTER_HEAD}"
+
+if [ "${BEFORE_HEAD}" = "${AFTER_HEAD}" ]; then
+    echo "No new commits on ${BRANCH}. Skipping migrate/build/restart."
+    echo "RESULT=noop"
+    echo "===== infrabeat-deploy: done (noop) ====="
+    exit 0
+fi
+
+cd "${BENCH}"
+
+echo "----- Phase B.4: ensure __init__.py at every level (gotcha #2) -----"
+# These are no-ops if files exist. Touching is idempotent.
+find "apps/${APP}/${APP}" -type d -not -path '*/node_modules/*' -not -path '*/.git/*' -exec sh -c '
+    test -f "$1/__init__.py" || touch "$1/__init__.py"
+' _ {} \;
+
+echo "----- Phase B.5: migrate -----"
+bench --site "${SITE}" migrate
+
+echo "----- Phase B.6: clear caches (gotcha #6) -----"
+bench --site "${SITE}" clear-cache
+bench --site "${SITE}" clear-website-cache
+
+echo "----- Phase B.7: build assets -----"
+bench build --app "${APP}"
+
+echo "----- Phase B.8: restart workers -----"
+if command -v supervisorctl >/dev/null 2>&1; then
+    sudo supervisorctl restart all || bench restart
+else
+    bench restart
+fi
+
+echo "----- Phase B.9: report -----"
+echo "BEFORE_HEAD=${BEFORE_HEAD}"
+echo "AFTER_HEAD=${AFTER_HEAD}"
+echo "RESULT=ok"
+echo "===== infrabeat-deploy: done (ok) ====="
