@@ -1,0 +1,155 @@
+#!/bin/bash
+# infrabeat-smoke-test: SSH-side battery for {{TARGET_ENV}}.
+# Generated: {{TIMESTAMP}}
+#
+# Output protocol: each check emits exactly one line in the format
+#   CHECK_<n>=PASS|FAIL|WARN <latency_ms> <detail>
+# Skill parses these to build the result table. set +e for probes so we
+# capture all checks even if one fails.
+
+SITE={{SITE}}
+BENCH={{BENCH_PATH}}
+VM_IP={{VM_IP}}
+
+echo "===== smoke-test {{TARGET_ENV}} ====="
+echo "Site:  ${SITE}"
+echo "Bench: ${BENCH}"
+echo "Time:  $(date -Iseconds)"
+echo
+
+# Helper: time a command in milliseconds (bash $SECONDS is integer; use date)
+_now_ms() { date +%s%3N; }
+
+# =========================================================================
+# CHECK 2: site root returns 200
+# (Check 1 = SSH reachable, already proven by us being inside this script)
+# =========================================================================
+T0=$(_now_ms)
+HTTP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://${VM_IP}/" || echo "000")
+T1=$(_now_ms)
+LAT=$((T1 - T0))
+if [ "${HTTP}" = "200" ]; then
+    echo "CHECK_2=PASS ${LAT} HTTP_${HTTP}"
+else
+    echo "CHECK_2=FAIL ${LAT} HTTP_${HTTP}"
+fi
+
+# =========================================================================
+# CHECK 3: login API works (sets cookie for checks 4 and 5)
+# =========================================================================
+COOKIE=/tmp/infrabeat_smoke_cookie_$$.txt
+trap "rm -f ${COOKIE}" EXIT
+
+T0=$(_now_ms)
+HTTP=$(curl -s -c "${COOKIE}" -o /dev/null -w "%{http_code}" \
+    --max-time 10 \
+    -X POST -d "usr=Administrator&pwd=admin123" \
+    "http://${VM_IP}/api/method/login")
+T1=$(_now_ms)
+LAT=$((T1 - T0))
+if [ "${HTTP}" = "200" ]; then
+    echo "CHECK_3=PASS ${LAT} login_ok"
+else
+    echo "CHECK_3=FAIL ${LAT} HTTP_${HTTP}"
+fi
+
+# =========================================================================
+# CHECK 4: Customer Visit list returns 200
+# (Proves custom_erp module folder nesting is correct - gotcha #2)
+# =========================================================================
+T0=$(_now_ms)
+HTTP=$(curl -s -b "${COOKIE}" -o /dev/null -w "%{http_code}" \
+    --max-time 10 \
+    "http://${VM_IP}/api/method/frappe.client.get_list?doctype=Customer%20Visit")
+T1=$(_now_ms)
+LAT=$((T1 - T0))
+if [ "${HTTP}" = "200" ]; then
+    echo "CHECK_4=PASS ${LAT} list_ok"
+else
+    echo "CHECK_4=FAIL ${LAT} HTTP_${HTTP}_likely_module_path_bug"
+fi
+
+# =========================================================================
+# CHECK 5: DocType meta fetch returns valid JSON
+# =========================================================================
+T0=$(_now_ms)
+META=$(curl -s -b "${COOKIE}" --max-time 10 \
+    "http://${VM_IP}/api/method/frappe.client.get?doctype=DocType&name=Customer%20Visit")
+T1=$(_now_ms)
+LAT=$((T1 - T0))
+# Quick JSON sanity: response should contain "fields" key
+if echo "${META}" | grep -q '"fields"'; then
+    echo "CHECK_5=PASS ${LAT} meta_has_fields"
+else
+    echo "CHECK_5=FAIL ${LAT} meta_invalid_or_no_fields"
+fi
+
+# =========================================================================
+# CHECK 6: Workers running
+# =========================================================================
+T0=$(_now_ms)
+if command -v supervisorctl >/dev/null 2>&1; then
+    STATUS=$(sudo supervisorctl status 2>/dev/null | grep -E "frappe.*(web|worker)" || true)
+    if echo "${STATUS}" | grep -q "RUNNING"; then
+        T1=$(_now_ms); LAT=$((T1 - T0))
+        RUNNING_COUNT=$(echo "${STATUS}" | grep -c "RUNNING")
+        echo "CHECK_6=PASS ${LAT} ${RUNNING_COUNT}_workers_running"
+    else
+        T1=$(_now_ms); LAT=$((T1 - T0))
+        echo "CHECK_6=FAIL ${LAT} no_workers_running"
+    fi
+else
+    # Dev VM may run via `bench dev` not supervisor. Check process list instead.
+    T0=$(_now_ms)
+    if pgrep -f "frappe.*serve" >/dev/null 2>&1 || pgrep -f "honcho" >/dev/null 2>&1; then
+        T1=$(_now_ms); LAT=$((T1 - T0))
+        echo "CHECK_6=PASS ${LAT} bench_dev_processes_present"
+    else
+        T1=$(_now_ms); LAT=$((T1 - T0))
+        echo "CHECK_6=FAIL ${LAT} no_bench_processes"
+    fi
+fi
+
+# =========================================================================
+# ADVISORY A1: Disk free
+# =========================================================================
+T0=$(_now_ms)
+USED=$(df -h "${BENCH}" 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%')
+T1=$(_now_ms); LAT=$((T1 - T0))
+if [ -n "${USED}" ]; then
+    if [ "${USED}" -ge 90 ]; then
+        echo "CHECK_A1=FAIL ${LAT} disk_${USED}_pct_used_critical"
+    elif [ "${USED}" -ge 80 ]; then
+        echo "CHECK_A1=WARN ${LAT} disk_${USED}_pct_used"
+    else
+        echo "CHECK_A1=PASS ${LAT} disk_${USED}_pct_used"
+    fi
+else
+    echo "CHECK_A1=WARN ${LAT} could_not_read_df"
+fi
+
+# =========================================================================
+# ADVISORY A2: Redis reachable (Frappe v15 cache on port 11000 typically)
+# =========================================================================
+T0=$(_now_ms)
+if command -v redis-cli >/dev/null 2>&1; then
+    PONG=$(redis-cli -p 11000 ping 2>/dev/null || echo "")
+    T1=$(_now_ms); LAT=$((T1 - T0))
+    if [ "${PONG}" = "PONG" ]; then
+        echo "CHECK_A2=PASS ${LAT} redis_pong"
+    else
+        # Try default 6379
+        PONG=$(redis-cli ping 2>/dev/null || echo "")
+        if [ "${PONG}" = "PONG" ]; then
+            echo "CHECK_A2=PASS ${LAT} redis_pong_default_port"
+        else
+            echo "CHECK_A2=WARN ${LAT} no_pong"
+        fi
+    fi
+else
+    T1=$(_now_ms); LAT=$((T1 - T0))
+    echo "CHECK_A2=WARN ${LAT} redis_cli_not_found"
+fi
+
+echo
+echo "===== smoke-test {{TARGET_ENV}}: complete ====="
