@@ -74,7 +74,6 @@
       "amend": 0,
       "report": 1,
       "export": 1,
-      "import": 1,
       "share": 1,
       "print": 1,
       "email": 1
@@ -108,5 +107,6 @@
   "sort_order": "DESC",
   "is_submittable": 0,
   "quick_entry": 1,
-  "allow_rename": 1
+  "allow_rename": 1,
+  "allow_import": 1
 }

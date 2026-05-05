@@ -5,3 +5,5 @@
 tags
 node_modules
 __pycache__
+.claude/audit_log/
+.claude/verify_doctype_paths.ps1
