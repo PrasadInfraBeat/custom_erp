@@ -29,7 +29,7 @@
     ],
     "deny": [
       "mcp__frappe-production__*",
-      "Bash(git push:*production*)",
+      "Bash(*push*production*)",
       "Bash(rm -rf:*)",
       "Bash(sudo rm:*)"
     ]
