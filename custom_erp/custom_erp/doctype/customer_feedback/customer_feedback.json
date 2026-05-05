@@ -1,6 +1,6 @@
 {
   "name": "Customer Feedback",
-  "module": "CRM",
+  "module": "Custom Erp",
   "doctype": "DocType",
   "engine": "InnoDB",
   "naming_rule": "By naming series",
