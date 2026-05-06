@@ -7,3 +7,9 @@ node_modules
 __pycache__
 .claude/audit_log/
 .claude/verify_doctype_paths.ps1
+
+# OAuth client credentials per VM (never committed)
+tools/infrabeat_erp/.secrets/
+
+# OAuth client credentials per VM (never committed)
+tools/infrabeat_erp/.secrets/
