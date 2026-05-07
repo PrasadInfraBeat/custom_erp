@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "infrabeat-erp"
+version = "0.1.0"
+description = "InfraBeat ERPNext CLI - discovery, OAuth, and MCP query bridge for FAC."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "InfraBeat" }]
+license = { text = "MIT" }
+dependencies = [
+    "click>=8.1",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+secure = ["keyring>=24", "cryptography>=42"]
+test = ["pytest>=8", "pytest-mock>=3", "respx>=0.21"]
+
+[project.scripts]
+infrabeat-erp = "infrabeat_erp.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
