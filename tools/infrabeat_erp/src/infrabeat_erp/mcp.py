@@ -5,10 +5,14 @@ The protocol envelope, endpoint path, and error semantics are preserved
 exactly as proven against Frappe Assistant Core (FAC) on dev / staging /
 production VMs.
 
-The MCP endpoint path (/assistant/mcp) is the value FAC v2.4.x advertises
-as ``mcp_endpoint`` in its OIDC well-known metadata; the Phase 5 script
-discovers it dynamically. The base URL and Bearer token come from the
-httpx.Client passed in, so this module never hardcodes a VM name.
+The MCP endpoint path (/api/method/frappe_assistant_core.api.fac_endpoint.handle_mcp)
+is the concrete Frappe whitelisted method that FAC routes JSON-RPC calls to.
+The base URL and Bearer token come from the httpx.Client passed in, so this
+module never hardcodes a VM name.
+
+Hardcoded for Phase 6B.3 simplicity. Phase 6E polish will refactor to read
+mcp_endpoint dynamically from /.well-known/openid-configuration discovery,
+matching the Phase 5 mcp_smoke_test.py pattern.
 """
 
 import itertools
@@ -19,7 +23,7 @@ import httpx
 
 from infrabeat_erp import __version__
 
-MCP_ENDPOINT_PATH = "/assistant/mcp"
+MCP_ENDPOINT_PATH = "/api/method/frappe_assistant_core.api.fac_endpoint.handle_mcp"
 PROTOCOL_VERSION = "2024-11-05"
 CLIENT_NAME = "infrabeat-erp"
 

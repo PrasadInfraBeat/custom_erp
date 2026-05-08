@@ -7,6 +7,7 @@ import pytest
 import respx
 
 from infrabeat_erp.mcp import (
+    MCP_ENDPOINT_PATH,
     MCPError,
     MCPProtocolError,
     ServerCapabilities,
@@ -17,7 +18,7 @@ from infrabeat_erp.mcp import (
 )
 
 BASE_URL = "http://erp.test"
-MCP_URL = f"{BASE_URL}/assistant/mcp"
+MCP_URL = BASE_URL + MCP_ENDPOINT_PATH
 
 
 def _ok(result: dict) -> httpx.Response:
