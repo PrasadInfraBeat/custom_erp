@@ -186,3 +186,144 @@ def test_smoke_without_login(monkeypatch: pytest.MonkeyPatch) -> None:
     result = CliRunner().invoke(cli.main, ["smoke", "dev"])
     assert result.exit_code == 1
     assert "login" in result.output
+
+
+# === Phase 6B.5 TESTS ===
+
+
+def _wire_data_chain(
+    monkeypatch: pytest.MonkeyPatch, call_tool_result: object
+) -> dict:
+    """Wire monkeypatches for data subcommands; capture call_tool args."""
+    captured: dict = {}
+    monkeypatch.setattr(config, "get_vm", lambda name: _vm())
+    monkeypatch.setattr(
+        secrets_store, "load_secrets", lambda vm: {"access_token": "tok"}
+    )
+    monkeypatch.setattr(http, "make_client", lambda *a, **k: MagicMock())
+
+    def fake_call_tool(client: object, name: str, args: dict) -> object:
+        captured["name"] = name
+        captured["arguments"] = args
+        if isinstance(call_tool_result, Exception):
+            raise call_tool_result
+        return call_tool_result
+
+    monkeypatch.setattr(mcp, "call_tool", fake_call_tool)
+    return captured
+
+
+def test_query_emits_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    _wire_data_chain(
+        monkeypatch,
+        {
+            "documents": [
+                {"name": "SO-001", "status": "Open"},
+                {"name": "SO-002", "status": "Closed"},
+            ]
+        },
+    )
+    result = CliRunner().invoke(cli.main, ["query", "dev", "Sales Order"])
+    assert result.exit_code == 0
+    assert "SO-001" in result.output
+    assert "SO-002" in result.output
+
+
+def test_query_with_filters(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _wire_data_chain(monkeypatch, {"documents": []})
+    result = CliRunner().invoke(
+        cli.main,
+        ["query", "dev", "Sales Order", "--filter", "status=Open"],
+    )
+    assert result.exit_code == 0
+    assert captured["arguments"]["filters"] == {"status": "Open"}
+
+
+def test_query_invalid_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    _wire_data_chain(monkeypatch, {"documents": []})
+    result = CliRunner().invoke(
+        cli.main,
+        ["query", "dev", "Sales Order", "--filter", "noequalsign"],
+    )
+    assert result.exit_code == 1
+    assert "invalid filter" in result.output
+
+
+def test_get_emits_document(monkeypatch: pytest.MonkeyPatch) -> None:
+    _wire_data_chain(
+        monkeypatch,
+        {"name": "SO-001", "customer": "ACME", "status": "Open"},
+    )
+    result = CliRunner().invoke(
+        cli.main, ["get", "dev", "Sales Order", "SO-001"]
+    )
+    assert result.exit_code == 0
+    assert "ACME" in result.output
+
+
+def test_get_handles_protocol_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_data_chain(
+        monkeypatch,
+        MCPProtocolError("JSON-RPC error -32602: Invalid params"),
+    )
+    result = CliRunner().invoke(
+        cli.main, ["get", "dev", "Sales Order", "SO-999"]
+    )
+    assert result.exit_code == 3
+
+
+def test_describe_emits_schema(monkeypatch: pytest.MonkeyPatch) -> None:
+    _wire_data_chain(
+        monkeypatch,
+        {
+            "fields": [
+                {"fieldname": "name", "fieldtype": "Data"},
+                {"fieldname": "status", "fieldtype": "Select"},
+            ]
+        },
+    )
+    result = CliRunner().invoke(
+        cli.main, ["describe", "dev", "Sales Order"]
+    )
+    assert result.exit_code == 0
+    assert "name" in result.output
+    assert "status" in result.output
+
+
+def test_search_emits_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    _wire_data_chain(
+        monkeypatch,
+        {
+            "results": [
+                {
+                    "doctype": "Sales Order",
+                    "name": "SO-001",
+                    "snippet": "ACME order",
+                }
+            ]
+        },
+    )
+    result = CliRunner().invoke(cli.main, ["search", "dev", "ACME"])
+    assert result.exit_code == 0
+    assert "SO-001" in result.output
+    assert "ACME" in result.output
+
+
+def test_query_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    _wire_data_chain(
+        monkeypatch,
+        {
+            "documents": [
+                {"name": "SO-001", "status": "Open"},
+            ]
+        },
+    )
+    result = CliRunner().invoke(
+        cli.main, ["query", "dev", "Sales Order", "--json"]
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["vm"] == "dev"
+    assert "documents" in payload
