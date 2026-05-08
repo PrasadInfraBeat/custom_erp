@@ -154,3 +154,278 @@ def smoke(vm_alias: str, as_json: bool) -> None:
         click.echo(f"Tools available: {len(tools)}")
         for tool in tools:
             click.echo(f"  - {tool.name}")
+
+
+# === Phase 6B.5 SUBCOMMANDS ===
+
+import httpx
+
+
+def _build_authed_client(
+    vm_alias: str,
+) -> tuple[config.VMConfig, dict, httpx.Client]:
+    """Resolve VM, load OAuth secrets, and build an authenticated HTTP client.
+
+    Exits with code 1 on unknown VM or missing secrets, mirroring the
+    register/login/smoke contract from Phase 6B.4b. The caller owns the
+    returned httpx.Client and is expected to close it (typically via
+    ``with client: ...``).
+    """
+    try:
+        vm_config = config.get_vm(vm_alias)
+    except Exception:
+        click.echo(f"unknown vm: {vm_alias}", err=True)
+        sys.exit(1)
+
+    try:
+        secrets = secrets_store.load_secrets(vm_alias)
+    except SecretsNotFound:
+        click.echo(
+            f"no tokens for {vm_alias}; run login first", err=True
+        )
+        sys.exit(1)
+
+    client = http.make_client(
+        vm_config.base_url, access_token=secrets.get("access_token")
+    )
+    return vm_config, secrets, client
+
+
+@main.command()
+@click.argument("vm_alias")
+@click.argument("doctype")
+@click.option(
+    "--filter",
+    "filters",
+    multiple=True,
+    help=(
+        "Field=value filter (repeatable, e.g. --filter status=Open "
+        "--filter customer=ACME)"
+    ),
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=20,
+    help="Max results to return (default 20)",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit machine-readable JSON",
+)
+def query(
+    vm_alias: str,
+    doctype: str,
+    filters: tuple,
+    limit: int,
+    as_json: bool,
+) -> None:
+    """List documents of DOCTYPE on VM_ALIAS, optionally filtered."""
+    filters_dict: dict = {}
+    for raw in filters:
+        if "=" not in raw:
+            click.echo(
+                f"invalid filter: {raw}; expected key=value", err=True
+            )
+            sys.exit(1)
+        key, value = raw.split("=", 1)
+        filters_dict[key] = value
+
+    _, _, client = _build_authed_client(vm_alias)
+    with client:
+        try:
+            result = mcp.call_tool(
+                client,
+                "list_documents",
+                {
+                    "doctype": doctype,
+                    "filters": filters_dict,
+                    "limit": limit,
+                },
+            )
+        except MCPProtocolError as exc:
+            click.echo(f"MCP protocol error: {exc}", err=True)
+            sys.exit(3)
+        except MCPError as exc:
+            click.echo(f"MCP error: {exc}", err=True)
+            sys.exit(2)
+
+    documents = (
+        result.get("documents", []) if isinstance(result, dict) else []
+    )
+
+    if as_json:
+        payload = {
+            "vm": vm_alias,
+            "doctype": doctype,
+            "count": len(documents),
+            "documents": documents,
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(f"DocType: {doctype} on {vm_alias}")
+    for doc in documents:
+        if isinstance(doc, dict):
+            summary = ", ".join(
+                f"{k}={doc[k]}" for k in list(doc.keys())[:4]
+            )
+            click.echo(f"  - {summary}")
+        else:
+            click.echo(f"  - {doc}")
+
+
+@main.command()
+@click.argument("vm_alias")
+@click.argument("doctype")
+@click.argument("name")
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit machine-readable JSON",
+)
+def get(
+    vm_alias: str,
+    doctype: str,
+    name: str,
+    as_json: bool,
+) -> None:
+    """Get a single document by NAME from DOCTYPE on VM_ALIAS."""
+    _, _, client = _build_authed_client(vm_alias)
+    with client:
+        try:
+            result = mcp.call_tool(
+                client,
+                "get_document",
+                {"doctype": doctype, "name": name},
+            )
+        except MCPProtocolError as exc:
+            click.echo(f"MCP protocol error: {exc}", err=True)
+            sys.exit(3)
+        except MCPError as exc:
+            click.echo(f"MCP error: {exc}", err=True)
+            sys.exit(2)
+
+    if as_json:
+        click.echo(json.dumps(result, indent=2))
+        return
+
+    click.echo(f"DocType: {doctype}")
+    click.echo(f"Name: {name}")
+    if isinstance(result, dict):
+        for key, value in result.items():
+            rendered = str(value)
+            if len(rendered) > 80:
+                rendered = rendered[:77] + "..."
+            click.echo(f"  {key}: {rendered}")
+
+
+@main.command()
+@click.argument("vm_alias")
+@click.argument("doctype")
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit machine-readable JSON",
+)
+def describe(vm_alias: str, doctype: str, as_json: bool) -> None:
+    """Show the schema (fields and types) of DOCTYPE on VM_ALIAS.
+
+    Sources the schema from FAC's get_doctype_info tool, which returns
+    DocType metadata including the field list with fieldname/fieldtype/label.
+    """
+    _, _, client = _build_authed_client(vm_alias)
+    with client:
+        try:
+            result = mcp.call_tool(
+                client,
+                "get_doctype_info",
+                {"doctype": doctype},
+            )
+        except MCPProtocolError as exc:
+            click.echo(f"MCP protocol error: {exc}", err=True)
+            sys.exit(3)
+        except MCPError as exc:
+            click.echo(f"MCP error: {exc}", err=True)
+            sys.exit(2)
+
+    if as_json:
+        click.echo(json.dumps(result, indent=2))
+        return
+
+    click.echo(f"DocType: {doctype}")
+    fields = result.get("fields") if isinstance(result, dict) else None
+    if isinstance(fields, list):
+        click.echo("Fields:")
+        for field in fields:
+            if isinstance(field, dict):
+                fname = field.get("fieldname", "?")
+                ftype = field.get("fieldtype", "?")
+                flabel = field.get("label", "")
+                click.echo(f"  {fname} ({ftype}): {flabel}")
+    else:
+        click.echo(json.dumps(result, indent=2))
+
+
+@main.command()
+@click.argument("vm_alias")
+@click.argument("text")
+@click.option(
+    "--limit",
+    type=int,
+    default=20,
+    help="Max results to return (default 20)",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit machine-readable JSON",
+)
+def search(
+    vm_alias: str,
+    text: str,
+    limit: int,
+    as_json: bool,
+) -> None:
+    """Full-text search for TEXT across all documents on VM_ALIAS."""
+    _, _, client = _build_authed_client(vm_alias)
+    with client:
+        try:
+            result = mcp.call_tool(
+                client,
+                "search_documents",
+                {"query": text, "limit": limit},
+            )
+        except MCPProtocolError as exc:
+            click.echo(f"MCP protocol error: {exc}", err=True)
+            sys.exit(3)
+        except MCPError as exc:
+            click.echo(f"MCP error: {exc}", err=True)
+            sys.exit(2)
+
+    results = (
+        result.get("results", []) if isinstance(result, dict) else []
+    )
+
+    if as_json:
+        payload = {
+            "vm": vm_alias,
+            "query": text,
+            "count": len(results),
+            "results": results,
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(f"Search: {text}")
+    for item in results:
+        if isinstance(item, dict):
+            dtype = item.get("doctype", "?")
+            iname = item.get("name", "?")
+            snippet = item.get("snippet") or item.get("title") or ""
+            click.echo(f"  - {dtype}/{iname}: {snippet}")
