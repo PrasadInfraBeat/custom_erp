@@ -13,3 +13,12 @@ tools/infrabeat_erp/.secrets/
 
 # OAuth client credentials per VM (never committed)
 tools/infrabeat_erp/.secrets/
+
+# === Phase 6B closure: gitignore correction + Phase 6C preempt ===
+# Secrets at any nesting level (Phase 6B CLI writes at CWD-relative ./.secrets/,
+# Phase 5 scripts wrote at tools/infrabeat_erp/.secrets/, both covered).
+# Phase 6C will promote secrets to OS keyring, retiring this storage entirely.
+.secrets/
+
+# Future audit log (Phase 6C will introduce)
+tools/infrabeat_erp/.audit/
