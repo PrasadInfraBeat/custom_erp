@@ -438,3 +438,72 @@ def test_allow_production_blocks_login_without_flag(monkeypatch, tmp_path):
     result = runner.invoke(main, ["login", "production"])
     assert result.exit_code == 1
     assert "allow-production" in result.output.lower()
+
+
+# === Phase 6C.1 KEYRING PROMOTION TESTS ===
+
+
+def test_migrate_secrets_dev_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict = {}
+
+    def fake_migrate(vm: str, base_dir=None) -> str:
+        captured["vm"] = vm
+        return "migrated"
+
+    monkeypatch.setattr(secrets_store, "migrate", fake_migrate)
+
+    result = CliRunner().invoke(cli.main, ["migrate-secrets", "--vm", "dev"])
+    assert result.exit_code == 0
+    assert captured["vm"] == "dev"
+    assert "dev" in result.output
+    assert "migrated" in result.output
+
+
+def test_migrate_secrets_production_requires_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        secrets_store,
+        "migrate",
+        lambda vm, base_dir=None: pytest.fail(
+            "migrate must not run for production without --allow-production"
+        ),
+    )
+
+    result = CliRunner().invoke(
+        cli.main, ["migrate-secrets", "--vm", "production"]
+    )
+    assert result.exit_code == 1
+    assert "allow-production" in result.stderr.lower()
+
+
+def test_migrate_secrets_all_skips_production_without_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        config,
+        "load_config",
+        lambda path=None: {
+            "dev": VMConfig(name="dev", base_url="http://erp.dev.test"),
+            "staging": VMConfig(
+                name="staging", base_url="http://erp.staging.test"
+            ),
+            "production": VMConfig(
+                name="production", base_url="http://erp.prod.test"
+            ),
+        },
+    )
+
+    migrated: list[str] = []
+
+    def fake_migrate(vm: str, base_dir=None) -> str:
+        migrated.append(vm)
+        return "migrated"
+
+    monkeypatch.setattr(secrets_store, "migrate", fake_migrate)
+
+    result = CliRunner().invoke(cli.main, ["migrate-secrets", "--all"])
+    assert result.exit_code == 0
+    assert "production" not in migrated
+    assert set(migrated) == {"dev", "staging"}
+    assert "production: skipped" in result.output
