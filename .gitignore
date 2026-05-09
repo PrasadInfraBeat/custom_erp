@@ -20,5 +20,5 @@ tools/infrabeat_erp/.secrets/
 # Phase 6C will promote secrets to OS keyring, retiring this storage entirely.
 .secrets/
 
-# Future audit log (Phase 6C will introduce)
-tools/infrabeat_erp/.audit/
+# Phase 6C.3 audit log (CWD-relative; Phase 6E promotes to user-home).
+.audit/
