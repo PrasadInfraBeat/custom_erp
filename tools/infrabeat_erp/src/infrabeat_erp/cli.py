@@ -429,3 +429,70 @@ def search(
             iname = item.get("name", "?")
             snippet = item.get("snippet") or item.get("title") or ""
             click.echo(f"  - {dtype}/{iname}: {snippet}")
+
+
+# === Phase 6C.3 AUDIT LOG ===
+# Single Group-level instrumentation point. Wraps BaseCommand.main on the
+# Group instance so every dispatch path (subcommands AND short-circuiting
+# eager options like --help) yields exactly one audit record with no
+# per-subcommand decoration.
+
+import time as _audit_time
+
+from infrabeat_erp import audit as _audit
+
+_AUDIT_SUBCOMMANDS = frozenset(
+    ["register", "login", "smoke", "query", "get", "describe", "search"]
+)
+_AUDIT_VM_ALIASES = frozenset(["dev", "staging", "production"])
+
+
+def _audit_resolve(argv_tail: list) -> tuple:
+    positionals = [str(a) for a in argv_tail if not str(a).startswith("-")]
+    if not positionals or positionals[0] not in _AUDIT_SUBCOMMANDS:
+        return "help", None
+    vm = None
+    if len(positionals) > 1 and positionals[1] in _AUDIT_VM_ALIASES:
+        vm = positionals[1]
+    return positionals[0], vm
+
+
+_audit_original_main = main.main
+
+
+def _audit_wrapped_main(*a, **kw):
+    start = _audit_time.monotonic()
+    cli_args = kw.get("args")
+    if cli_args is None and a:
+        cli_args = a[0]
+    if cli_args is None:
+        cli_args = sys.argv[1:]
+    argv_tail = list(cli_args)
+    subcommand, vm = _audit_resolve(argv_tail)
+    exit_code = 0
+    try:
+        return _audit_original_main(*a, **kw)
+    except SystemExit as exc:
+        code = exc.code
+        exit_code = code if isinstance(code, int) else (0 if code is None else 1)
+        raise
+    except click.exceptions.Exit as exc:
+        exit_code = int(getattr(exc, "exit_code", 1) or 0)
+        raise
+    except BaseException:
+        exit_code = 1
+        raise
+    finally:
+        duration_ms = int((_audit_time.monotonic() - start) * 1000)
+        _audit.write_audit_record(
+            _audit.build_audit_record(
+                subcommand=subcommand,
+                vm=vm,
+                args=argv_tail,
+                exit_code=exit_code,
+                duration_ms=duration_ms,
+            )
+        )
+
+
+main.main = _audit_wrapped_main
