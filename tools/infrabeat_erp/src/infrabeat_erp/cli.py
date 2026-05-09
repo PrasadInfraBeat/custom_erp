@@ -13,8 +13,20 @@ from infrabeat_erp import __version__
     help="InfraBeat ERPNext CLI - discovery, OAuth, and MCP query bridge for FAC."
 )
 @click.version_option(version=__version__, prog_name="infrabeat-erp")
-def main() -> None:
+@click.option(
+    "--allow-production",
+    is_flag=True,
+    default=False,
+    help=(
+        "Required to target the 'production' VM alias. Per-invocation only. "
+        "See Phase 6C.2 production guards."
+    ),
+)
+@click.pass_context
+def main(ctx: click.Context, allow_production: bool) -> None:
     """Root command group. Subcommands appear in sub-phase 6B."""
+    ctx.ensure_object(dict)
+    ctx.obj["allow_production"] = allow_production
 
 
 if __name__ == "__main__":
@@ -36,6 +48,7 @@ from infrabeat_erp.secrets_store import SecretsNotFound
 @click.argument("vm_alias")
 def register(vm_alias: str) -> None:
     """Discover OAuth metadata and register a dynamic client for VM_ALIAS."""
+    _ensure_production_allowed(vm_alias)
     try:
         vm_config = config.get_vm(vm_alias)
     except Exception:
@@ -58,6 +71,7 @@ def register(vm_alias: str) -> None:
 @click.argument("vm_alias")
 def login(vm_alias: str) -> None:
     """Run OAuth authorization code + PKCE flow for VM_ALIAS."""
+    _ensure_production_allowed(vm_alias)
     try:
         vm_config = config.get_vm(vm_alias)
     except Exception:
@@ -102,6 +116,7 @@ def login(vm_alias: str) -> None:
 )
 def smoke(vm_alias: str, as_json: bool) -> None:
     """Initialize MCP and list tools - full-stack health check for VM_ALIAS."""
+    _ensure_production_allowed(vm_alias)
     try:
         vm_config = config.get_vm(vm_alias)
     except Exception:
@@ -171,6 +186,7 @@ def _build_authed_client(
     returned httpx.Client and is expected to close it (typically via
     ``with client: ...``).
     """
+    _ensure_production_allowed(vm_alias)
     try:
         vm_config = config.get_vm(vm_alias)
     except Exception:
@@ -496,3 +512,93 @@ def _audit_wrapped_main(*a, **kw):
 
 
 main.main = _audit_wrapped_main
+
+
+# === Phase 6C.2 PRODUCTION GUARDS ===
+# Two distinct guard mechanisms for production-targeted operations:
+#
+# 1. --allow-production: Group-level Click flag that gates access to
+#    vm_alias 'production'. Per-invocation only; not a session toggle.
+#    Enforced via _ensure_production_allowed(), called as the first
+#    line of _build_authed_client (catches query/get/describe/search)
+#    AND as the first line of smoke (smoke does not flow through
+#    _build_authed_client). register/login intentionally remain
+#    ungated in 6C.2 - those are setup commands not covered by the
+#    6C.2 test contract; revisit in a later sub-phase if needed.
+#
+# 2. _confirm_deploy_or_env: helper for FUTURE mutating subcommands
+#    (none exist today; reserved for Phase 7+). Reads INFRABEAT_CONFIRM
+#    env var for CI/scripted use, otherwise prompts interactively for
+#    the literal string 'DEPLOY'.
+#
+# Refusal yields exit code 1 (user-error per the closure-doc exit-code
+# contract: 0 success / 1 user error / 2 transport / 3 protocol).
+#
+# Audit interaction (Phase 6C.3, already merged): the Group main
+# wrapper records argv verbatim, so whether --allow-production was
+# passed is captured automatically as forensic proof of guard
+# engagement. No 6C.2 changes to the audit module needed.
+#
+# Cross-cutting touchpoints intentionally diverge from the strict
+# single-hunk discipline because group-level flags inherently span
+# multiple sites: the @click.group() decorator gains an option,
+# _build_authed_client gains a first-line guard call, and smoke
+# gains a first-line guard call. All additions are additive; existing
+# lines remain byte-identical to their post-6C.3 state.
+
+import os as _guards_os
+
+
+def _ensure_production_allowed(vm_alias: str) -> None:
+    """Refuse production access unless --allow-production was passed.
+
+    Dev and staging are unaffected. Reads the flag from the current
+    Click context (set by the Group callback into ctx.obj). Emits a
+    clear stderr refusal naming --allow-production and exits with
+    code 1 if the flag is missing on a production-targeted call.
+    """
+    if vm_alias != "production":
+        return
+    ctx = click.get_current_context(silent=True)
+    allowed = False
+    if ctx is not None and isinstance(ctx.obj, dict):
+        allowed = bool(ctx.obj.get("allow_production"))
+    if not allowed:
+        click.echo(
+            "refusing to target production VM without --allow-production "
+            "flag; pass --allow-production before the subcommand to proceed",
+            err=True,
+        )
+        sys.exit(1)
+
+
+def _confirm_deploy_or_env(env_var: str = "INFRABEAT_CONFIRM") -> None:
+    """Require explicit DEPLOY confirmation for mutating production ops.
+
+    If the env var (default INFRABEAT_CONFIRM) is set to the literal
+    string 'DEPLOY', proceed silently - intended for CI/scripted use.
+    Otherwise prompt interactively and require the user to type
+    'DEPLOY' verbatim. Wrong input or KeyboardInterrupt aborts with
+    exit code 1.
+
+    Reserved for future mutating subcommands (Phase 7+). No existing
+    6C.2 subcommand calls this helper - current 7 are all read-only.
+    """
+    if _guards_os.environ.get(env_var) == "DEPLOY":
+        return
+    try:
+        answer = click.prompt(
+            "Type DEPLOY to confirm this production-impacting action",
+            default="",
+            show_default=False,
+        )
+    except (click.Abort, KeyboardInterrupt):
+        click.echo(
+            "aborted: DEPLOY confirmation not received", err=True
+        )
+        sys.exit(1)
+    if answer != "DEPLOY":
+        click.echo(
+            "aborted: DEPLOY confirmation not received", err=True
+        )
+        sys.exit(1)
