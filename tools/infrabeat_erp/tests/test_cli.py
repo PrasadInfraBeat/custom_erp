@@ -1,3 +1,4 @@
+from infrabeat_erp.cli import main
 """Tests for infrabeat_erp.cli subcommands (Phase 6B.4b)."""
 
 import json
@@ -327,3 +328,113 @@ def test_query_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = json.loads(result.output)
     assert payload["vm"] == "dev"
     assert "documents" in payload
+
+
+# === Phase 6C.2 PRODUCTION GUARDS TESTS ===
+
+import click
+
+
+def _vm_named(name: str) -> VMConfig:
+    return VMConfig(name=name, base_url=f"http://erp.{name}.test")
+
+
+def test_allow_production_blocks_production_without_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(config, "get_vm", lambda name: _vm_named(name))
+    monkeypatch.setattr(
+        secrets_store, "load_secrets", lambda vm: {"access_token": "tok"}
+    )
+    monkeypatch.setattr(http, "make_client", lambda *a, **k: MagicMock())
+
+    result = CliRunner().invoke(
+        cli.main, ["smoke", "production"]
+    )
+    assert result.exit_code == 1
+    assert "--allow-production" in result.stderr
+
+
+def test_allow_production_permits_production_with_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_smoke_chain(monkeypatch)
+    monkeypatch.setattr(config, "get_vm", lambda name: _vm_named(name))
+
+    result = CliRunner().invoke(
+        cli.main, ["--allow-production", "smoke", "production"]
+    )
+    assert result.exit_code == 0
+    assert "--allow-production" not in result.stderr
+    assert "frappe-assistant-core" in result.output
+
+
+def test_allow_production_irrelevant_for_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_smoke_chain(monkeypatch)
+    result = CliRunner().invoke(cli.main, ["smoke", "dev"])
+    assert result.exit_code == 0
+    assert "--allow-production" not in result.stderr
+
+
+def test_allow_production_irrelevant_for_staging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_smoke_chain(monkeypatch)
+    monkeypatch.setattr(config, "get_vm", lambda name: _vm_named(name))
+    result = CliRunner().invoke(
+        cli.main, ["smoke", "staging"]
+    )
+    assert result.exit_code == 0
+    assert "--allow-production" not in result.stderr
+
+
+def test_confirm_deploy_via_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("INFRABEAT_CONFIRM", "DEPLOY")
+    prompt_called: list = []
+
+    def fake_prompt(*args: object, **kwargs: object) -> str:
+        prompt_called.append(True)
+        return "DEPLOY"
+
+    monkeypatch.setattr(click, "prompt", fake_prompt)
+    assert cli._confirm_deploy_or_env() is None
+    assert prompt_called == []
+
+
+def test_confirm_deploy_interactive_correct(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("INFRABEAT_CONFIRM", raising=False)
+    monkeypatch.setattr(click, "prompt", lambda *a, **k: "DEPLOY")
+    assert cli._confirm_deploy_or_env() is None
+
+
+def test_confirm_deploy_interactive_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("INFRABEAT_CONFIRM", raising=False)
+    monkeypatch.setattr(click, "prompt", lambda *a, **k: "NOPE")
+    with pytest.raises(SystemExit) as exc_info:
+        cli._confirm_deploy_or_env()
+    assert exc_info.value.code == 1
+
+
+
+def test_allow_production_blocks_register_without_flag(monkeypatch, tmp_path):
+    """register production refuses without --allow-production (closes 6C.2 coverage gap)."""
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["register", "production"])
+    assert result.exit_code == 1
+    assert "allow-production" in result.output.lower()
+
+
+def test_allow_production_blocks_login_without_flag(monkeypatch, tmp_path):
+    """login production refuses without --allow-production (closes 6C.2 coverage gap)."""
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["login", "production"])
+    assert result.exit_code == 1
+    assert "allow-production" in result.output.lower()
