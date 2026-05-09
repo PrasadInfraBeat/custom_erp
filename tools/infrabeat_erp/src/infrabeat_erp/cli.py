@@ -602,3 +602,83 @@ def _confirm_deploy_or_env(env_var: str = "INFRABEAT_CONFIRM") -> None:
             "aborted: DEPLOY confirmation not received", err=True
         )
         sys.exit(1)
+
+
+# === Phase 6C.1 KEYRING PROMOTION ===
+# migrate-secrets subcommand: moves <cwd>/.secrets/<vm>.json plaintext
+# into the keyring-primary backend (or Fernet-encrypted JSON fallback
+# when keyring is unavailable). Renames the original to .json.migrated
+# for forensic trail. Idempotent: re-running on a migrated VM is a
+# no-op. --vm <alias> targets one VM; --all (default behavior when
+# --vm is omitted) iterates every alias in config.toml.
+#
+# Production targeting still flows through _ensure_production_allowed
+# (Phase 6C.2): an explicit --vm production aborts without
+# --allow-production at the Group level; --all silently skips
+# production with a warning instead of aborting the whole batch.
+
+# Extend the 6C.3 audit subcommand allow-list so migrate-secrets
+# records as 'migrate-secrets' rather than the 'help' fall-through.
+_AUDIT_SUBCOMMANDS = _AUDIT_SUBCOMMANDS | frozenset(["migrate-secrets"])
+
+
+@main.command("migrate-secrets")
+@click.option(
+    "--vm",
+    "vm_alias",
+    default=None,
+    help="Migrate only this VM alias (mutually exclusive with --all).",
+)
+@click.option(
+    "--all",
+    "do_all",
+    is_flag=True,
+    default=False,
+    help="Migrate every VM in config.toml. Default when --vm omitted.",
+)
+@click.pass_context
+def migrate_secrets(
+    ctx: click.Context,
+    vm_alias: str | None,
+    do_all: bool,
+) -> None:
+    """Migrate plaintext .secrets/<vm>.json into keyring (or encrypted JSON).
+
+    After verifying the new backend works, manually delete the
+    .json.migrated files left behind for the forensic trail.
+    """
+    if vm_alias and do_all:
+        click.echo(
+            "--vm and --all are mutually exclusive", err=True
+        )
+        sys.exit(1)
+
+    if vm_alias:
+        targets = [vm_alias]
+    else:
+        try:
+            targets = sorted(config.load_config())
+        except FileNotFoundError as exc:
+            click.echo(f"config error: {exc}", err=True)
+            sys.exit(1)
+
+    allow_production = bool(
+        ctx.obj.get("allow_production")
+        if isinstance(ctx.obj, dict)
+        else False
+    )
+
+    for target in targets:
+        if target == "production" and not allow_production:
+            if vm_alias:
+                _ensure_production_allowed(target)
+            click.echo(
+                f"{target}: skipped (pass --allow-production to migrate)"
+            )
+            continue
+        try:
+            status = secrets_store.migrate(target)
+        except secrets_store.SecretsStoreError as exc:
+            click.echo(f"{target}: error: {exc}", err=True)
+            sys.exit(1)
+        click.echo(f"{target}: {status}")
