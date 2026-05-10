@@ -40,7 +40,12 @@ from dataclasses import asdict
 
 from infrabeat_erp import config, http, mcp, oauth, secrets_store
 from infrabeat_erp.mcp import MCPError, MCPProtocolError
-from infrabeat_erp.oauth import ClientRegistration, LoginError, RegistrationError
+from infrabeat_erp.oauth import (
+    ClientRegistration,
+    LoginError,
+    RefreshError,
+    RegistrationError,
+)
 from infrabeat_erp.secrets_store import SecretsNotFound
 
 
@@ -176,6 +181,96 @@ def smoke(vm_alias: str, as_json: bool) -> None:
 import httpx
 
 
+# === Phase 6E.9 TOKEN AUTO-REFRESH =======================================
+# Transparent OAuth refresh on 401 from MCP. Implemented as an httpx.Auth
+# (the idiomatic httpx pattern) so every request through an authed client
+# gets a one-shot refresh + retry without any per-call wrapping in the
+# subcommands or in mcp._rpc. Refresh failure (e.g. expired refresh_token)
+# raises TokenRefreshFailed with a "run login" hint instead of letting an
+# opaque 401 surface as an MCPError.
+
+class TokenRefreshFailed(Exception):
+    """Auto-refresh attempted but failed; user must re-run ``infrabeat-erp login``."""
+
+
+class TokenRefreshAuth(httpx.Auth):
+    """httpx.Auth that auto-refreshes a 401 once via the OAuth refresh token.
+
+    On the first 401 in this client's lifetime, calls oauth.refresh with
+    the stored ClientRegistration + refresh_token, persists the new tokens
+    via secrets_store.save_secrets, and replays the original request with
+    the new bearer. If refresh itself fails, raises TokenRefreshFailed
+    carrying a clear hint to re-run login. Subsequent 401s in the same
+    client lifetime are not retried (avoids refresh-loop on a server-side
+    auth misconfiguration).
+    """
+
+    requires_response_body = True
+
+    def __init__(
+        self,
+        vm_alias: str,
+        base_url: str,
+        secrets: dict,
+    ) -> None:
+        self._vm_alias = vm_alias
+        self._base_url = base_url
+        self._secrets = dict(secrets)
+        self._access_token = secrets.get("access_token") or ""
+        self._refresh_token = secrets.get("refresh_token") or ""
+        self._client_id = secrets.get("client_id")
+        self._client_secret = secrets.get("client_secret")
+        self._redirect_uri = secrets.get("redirect_uri") or ""
+        self._registration_endpoint = (
+            secrets.get("registration_endpoint") or ""
+        )
+        self._refresh_attempted = False
+
+    def auth_flow(self, request):
+        if self._access_token:
+            request.headers["Authorization"] = (
+                f"Bearer {self._access_token}"
+            )
+        response = yield request
+        if response.status_code != 401:
+            return
+        if self._refresh_attempted:
+            return
+        if not self._refresh_token or not self._client_id:
+            return
+        self._refresh_attempted = True
+        client_reg = ClientRegistration(
+            client_id=self._client_id,
+            client_secret=self._client_secret,
+            redirect_uri=self._redirect_uri,
+            registration_endpoint=self._registration_endpoint,
+        )
+        try:
+            new_tokens = oauth.refresh(
+                self._base_url, client_reg, self._refresh_token
+            )
+        except RefreshError as exc:
+            raise TokenRefreshFailed(
+                "Access token expired and refresh failed: "
+                f"{exc}. Run: infrabeat-erp login {self._vm_alias}"
+            ) from exc
+        self._access_token = new_tokens.access_token
+        self._refresh_token = (
+            new_tokens.refresh_token or self._refresh_token
+        )
+        self._secrets["access_token"] = self._access_token
+        self._secrets["refresh_token"] = self._refresh_token
+        self._secrets["token_type"] = new_tokens.token_type
+        self._secrets["expires_in"] = new_tokens.expires_in
+        self._secrets["issued_at"] = new_tokens.issued_at
+        self._secrets["scope"] = new_tokens.scope
+        secrets_store.save_secrets(self._vm_alias, self._secrets)
+        request.headers["Authorization"] = (
+            f"Bearer {self._access_token}"
+        )
+        yield request
+
+
 def _build_authed_client(
     vm_alias: str,
 ) -> tuple[config.VMConfig, dict, httpx.Client]:
@@ -185,6 +280,12 @@ def _build_authed_client(
     register/login/smoke contract from Phase 6B.4b. The caller owns the
     returned httpx.Client and is expected to close it (typically via
     ``with client: ...``).
+
+    Phase 6E.9: the returned client carries a TokenRefreshAuth so a 401
+    from any downstream call (typically MCP) triggers a transparent OAuth
+    refresh + retry using the stored refresh_token. The Authorization
+    header is set per-request by the auth flow rather than at the
+    client-level (access_token=None to make_client) to avoid duplication.
     """
     _ensure_production_allowed(vm_alias)
     try:
@@ -204,6 +305,7 @@ def _build_authed_client(
     client = http.make_client(
         vm_config.base_url, access_token=secrets.get("access_token")
     )
+    client.auth = TokenRefreshAuth(vm_alias, vm_config.base_url, secrets)
     return vm_config, secrets, client
 
 
