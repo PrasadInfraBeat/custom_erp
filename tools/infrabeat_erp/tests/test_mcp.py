@@ -6,6 +6,7 @@ import httpx
 import pytest
 import respx
 
+from infrabeat_erp import mcp
 from infrabeat_erp.mcp import (
     MCP_ENDPOINT_PATH,
     MCPError,
@@ -16,9 +17,25 @@ from infrabeat_erp.mcp import (
     initialize,
     list_tools,
 )
+from infrabeat_erp.oauth import clear_discovery_cache
 
 BASE_URL = "http://erp.test"
 MCP_URL = BASE_URL + MCP_ENDPOINT_PATH
+DISCOVERY_URL = BASE_URL + "/.well-known/openid-configuration"
+
+
+def _mock_discovery(mcp_path: str = MCP_ENDPOINT_PATH) -> None:
+    """Stub OIDC discovery to advertise mcp_endpoint=mcp_path."""
+    respx.get(DISCOVERY_URL).mock(
+        return_value=httpx.Response(200, json={"mcp_endpoint": mcp_path})
+    )
+
+
+@pytest.fixture(autouse=True)
+def _clear_discovery_cache_between_tests():
+    clear_discovery_cache()
+    yield
+    clear_discovery_cache()
 
 
 def _ok(result: dict) -> httpx.Response:
@@ -41,6 +58,7 @@ def _err(code: int, message: str) -> httpx.Response:
 
 @respx.mock
 def test_initialize_success() -> None:
+    _mock_discovery()
     respx.post(MCP_URL).mock(
         return_value=_ok(
             {
@@ -65,6 +83,7 @@ def test_initialize_success() -> None:
 
 @respx.mock
 def test_initialize_protocol_error() -> None:
+    _mock_discovery()
     respx.post(MCP_URL).mock(
         return_value=_err(-32601, "Method not found")
     )
@@ -78,6 +97,7 @@ def test_initialize_protocol_error() -> None:
 
 @respx.mock
 def test_list_tools_returns_three() -> None:
+    _mock_discovery()
     respx.post(MCP_URL).mock(
         return_value=_ok(
             {
@@ -115,6 +135,7 @@ def test_list_tools_returns_three() -> None:
 
 @respx.mock
 def test_list_tools_empty() -> None:
+    _mock_discovery()
     respx.post(MCP_URL).mock(return_value=_ok({"tools": []}))
     with httpx.Client(base_url=BASE_URL) as client:
         tools = list_tools(client)
@@ -123,6 +144,7 @@ def test_list_tools_empty() -> None:
 
 @respx.mock
 def test_call_tool_success() -> None:
+    _mock_discovery()
     expected = {"content": [{"type": "text", "text": "hello"}]}
     respx.post(MCP_URL).mock(return_value=_ok(expected))
     with httpx.Client(base_url=BASE_URL) as client:
@@ -132,6 +154,7 @@ def test_call_tool_success() -> None:
 
 @respx.mock
 def test_call_tool_protocol_error() -> None:
+    _mock_discovery()
     respx.post(MCP_URL).mock(return_value=_err(-32602, "Invalid params"))
     with httpx.Client(base_url=BASE_URL) as client:
         with pytest.raises(MCPProtocolError) as exc:
@@ -141,6 +164,7 @@ def test_call_tool_protocol_error() -> None:
 
 @respx.mock
 def test_call_tool_passes_arguments() -> None:
+    _mock_discovery()
     route = respx.post(MCP_URL).mock(return_value=_ok({}))
     with httpx.Client(base_url=BASE_URL) as client:
         call_tool(client, "my_tool", {"x": 1, "y": "abc"})
@@ -152,6 +176,7 @@ def test_call_tool_passes_arguments() -> None:
 
 @respx.mock
 def test_jsonrpc_ids_unique() -> None:
+    _mock_discovery()
     route = respx.post(MCP_URL).mock(return_value=_ok({"tools": []}))
     with httpx.Client(base_url=BASE_URL) as client:
         list_tools(client)
@@ -159,3 +184,47 @@ def test_jsonrpc_ids_unique() -> None:
     body_a = json.loads(route.calls[0].request.read())
     body_b = json.loads(route.calls[1].request.read())
     assert body_a["id"] != body_b["id"]
+
+
+@respx.mock
+def test_mcp_endpoint_discovered_dynamically() -> None:
+    """Discovery advertises a non-default mcp_endpoint; client honors it."""
+    different_path = "/api/method/different.path"
+    _mock_discovery(mcp_path=different_path)
+    different_url = BASE_URL + different_path
+    fallback_route = respx.post(MCP_URL).mock(return_value=_ok({}))
+    discovered_route = respx.post(different_url).mock(
+        return_value=_ok(
+            {
+                "serverInfo": {"name": "fac", "version": "9.9.9"},
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}, "streaming": False},
+            }
+        )
+    )
+    with httpx.Client(base_url=BASE_URL) as client:
+        caps = initialize(client)
+    assert caps.server_name == "fac"
+    assert discovered_route.called
+    assert not fallback_route.called
+
+
+@respx.mock
+def test_mcp_endpoint_discovery_fallback_warns() -> None:
+    """Discovery without mcp_endpoint key triggers DeprecationWarning + fallback."""
+    respx.get(DISCOVERY_URL).mock(
+        return_value=httpx.Response(200, json={"issuer": BASE_URL})
+    )
+    respx.post(MCP_URL).mock(
+        return_value=_ok(
+            {
+                "serverInfo": {"name": "fac", "version": "1.0"},
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+            }
+        )
+    )
+    with httpx.Client(base_url=BASE_URL) as client:
+        with pytest.warns(DeprecationWarning, match="mcp_endpoint"):
+            caps = mcp.initialize(client)
+    assert caps.server_name == "fac"

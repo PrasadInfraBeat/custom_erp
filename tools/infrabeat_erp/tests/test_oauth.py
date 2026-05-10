@@ -21,9 +21,17 @@ from infrabeat_erp.oauth import (
     _generate_code_verifier,
     _generate_state,
     _pkce_challenge,
+    clear_discovery_cache,
     refresh,
     register_client,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_discovery_cache_between_tests():
+    clear_discovery_cache()
+    yield
+    clear_discovery_cache()
 
 BASE_URL = "http://erp.test"
 METADATA_URL = f"{BASE_URL}/.well-known/openid-configuration"

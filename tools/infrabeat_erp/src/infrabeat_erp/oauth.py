@@ -86,6 +86,19 @@ class RefreshError(OAuthError):
     """Refresh token grant failed."""
 
 
+class DiscoveryError(Exception):
+    """Default exception when OIDC discovery fails outside an OAuth flow."""
+
+
+# === Discovery cache ======================================================
+_discovery_cache: dict = {}
+
+
+def clear_discovery_cache() -> None:
+    """Clear the in-process OIDC discovery metadata cache."""
+    _discovery_cache.clear()
+
+
 # === Private helpers ======================================================
 def _generate_code_verifier() -> str:
     """Return a PKCE code_verifier per RFC 7636 (43-128 unreserved chars)."""
@@ -103,15 +116,29 @@ def _generate_state() -> str:
     return secrets.token_urlsafe(24)
 
 
-def _discover(base_url: str, error_cls: type[OAuthError]) -> dict:
-    """Fetch OIDC discovery metadata; raise error_cls on HTTP failure."""
+def discover_oidc_metadata(
+    base_url: str,
+    *,
+    error_cls: type[Exception] = DiscoveryError,
+    cache: bool = True,
+) -> dict:
+    """Fetch OIDC discovery metadata; raise error_cls on HTTP failure.
+
+    Results are memoized per base_url in a process-wide cache when
+    cache=True (default). Use clear_discovery_cache() to invalidate.
+    """
+    if cache and base_url in _discovery_cache:
+        return _discovery_cache[base_url]
     with make_client(base_url, access_token=None) as client:
         resp = client.get(DISCOVERY_PATH)
     if resp.status_code != 200:
         raise error_cls(
             f"metadata discovery failed: HTTP {resp.status_code}"
         )
-    return resp.json()
+    metadata = resp.json()
+    if cache:
+        _discovery_cache[base_url] = metadata
+    return metadata
 
 
 def _unwrap(body: object) -> dict:
@@ -214,7 +241,7 @@ def register_client(
     Raises:
         RegistrationError: On any discovery or registration failure.
     """
-    metadata = _discover(base_url, RegistrationError)
+    metadata = discover_oidc_metadata(base_url, error_cls=RegistrationError)
     reg_endpoint = metadata.get("registration_endpoint")
     if not reg_endpoint:
         raise RegistrationError(
@@ -278,7 +305,7 @@ def login_authcode_pkce(
         LoginError: On state mismatch, callback timeout, error response,
             or a non-success HTTP status from the token endpoint.
     """
-    metadata = _discover(base_url, LoginError)
+    metadata = discover_oidc_metadata(base_url, error_cls=LoginError)
     auth_endpoint = metadata["authorization_endpoint"]
     token_endpoint = metadata["token_endpoint"]
 
@@ -369,7 +396,7 @@ def refresh(
     Raises:
         RefreshError: On any discovery or refresh failure.
     """
-    metadata = _discover(base_url, RefreshError)
+    metadata = discover_oidc_metadata(base_url, error_cls=RefreshError)
     token_endpoint = metadata["token_endpoint"]
 
     with make_client(base_url, access_token=None) as http_client:
