@@ -20,9 +20,6 @@ tools/infrabeat_erp/.secrets/
 # Phase 6C will promote secrets to OS keyring, retiring this storage entirely.
 .secrets/
 
-# Phase 6C.3 audit log (CWD-relative; Phase 6E promotes to user-home).
-.audit/
-
 # One-off helper scripts placed at repo root for surgical operations
 # (Should never have been committed; these patterns prevent future recurrence)
 /apply_*.py
