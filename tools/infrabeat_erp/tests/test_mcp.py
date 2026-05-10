@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 
-from infrabeat_erp import mcp
+from infrabeat_erp import cli, mcp, secrets_store
 from infrabeat_erp.mcp import (
     MCP_ENDPOINT_PATH,
     MCPError,
@@ -228,3 +228,134 @@ def test_mcp_endpoint_discovery_fallback_warns() -> None:
         with pytest.warns(DeprecationWarning, match="mcp_endpoint"):
             caps = mcp.initialize(client)
     assert caps.server_name == "fac"
+
+
+# === Phase 6E.9 TOKEN AUTO-REFRESH TESTS ==================================
+
+TOKEN_PATH = "/api/method/frappe.integrations.oauth2.get_token"
+TOKEN_URL = BASE_URL + TOKEN_PATH
+
+
+def _mock_discovery_with_token_endpoint() -> None:
+    """OIDC discovery stub advertising both mcp_endpoint and token_endpoint."""
+    respx.get(DISCOVERY_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "mcp_endpoint": MCP_ENDPOINT_PATH,
+                "token_endpoint": TOKEN_URL,
+            },
+        )
+    )
+
+
+def _seeded_secrets() -> dict:
+    """Return a secrets dict shaped like a post-login keyring entry."""
+    return {
+        "access_token": "old_access",
+        "refresh_token": "old_refresh",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "issued_at": 0.0,
+        "scope": "all openid",
+        "client_id": "abc-client",
+        "client_secret": None,
+        "redirect_uri": "http://127.0.0.1:8765/callback",
+        "registration_endpoint": BASE_URL + "/register",
+    }
+
+
+@respx.mock
+def test_token_autorefresh_on_401(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """First MCP POST 401 -> auth refreshes, persists, replays with new bearer."""
+    _mock_discovery_with_token_endpoint()
+    mcp_route = respx.post(MCP_URL).mock(
+        side_effect=[
+            httpx.Response(401, json={"error": "expired_token"}),
+            _ok(
+                {
+                    "serverInfo": {"name": "fac", "version": "9.9.9"},
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {}, "streaming": False},
+                }
+            ),
+        ]
+    )
+    refresh_route = respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "access_token": "new_access",
+                "refresh_token": "new_refresh",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "scope": "all openid",
+            },
+        )
+    )
+
+    saved: list = []
+    monkeypatch.setattr(
+        secrets_store,
+        "save_secrets",
+        lambda vm, data: saved.append((vm, dict(data))),
+    )
+
+    auth = cli.TokenRefreshAuth("dev", BASE_URL, _seeded_secrets())
+    with httpx.Client(base_url=BASE_URL) as client:
+        client.auth = auth
+        caps = mcp.initialize(client)
+
+    assert caps.server_name == "fac"
+    assert refresh_route.called
+    assert refresh_route.call_count == 1
+    assert mcp_route.call_count == 2
+    second_request = mcp_route.calls[1].request
+    assert second_request.headers["Authorization"] == "Bearer new_access"
+    assert saved == [
+        (
+            "dev",
+            {
+                **_seeded_secrets(),
+                "access_token": "new_access",
+                "refresh_token": "new_refresh",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "issued_at": saved[0][1]["issued_at"],
+                "scope": "all openid",
+            },
+        )
+    ]
+
+
+@respx.mock
+def test_token_autorefresh_fails_on_expired_refresh_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Refresh endpoint 401 -> TokenRefreshFailed with 'login' hint."""
+    _mock_discovery_with_token_endpoint()
+    respx.post(MCP_URL).mock(
+        return_value=httpx.Response(401, json={"error": "expired_token"})
+    )
+    respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            401, json={"error": "invalid_grant"}
+        )
+    )
+
+    monkeypatch.setattr(
+        secrets_store,
+        "save_secrets",
+        lambda vm, data: pytest.fail(
+            "save_secrets must not run when refresh itself fails"
+        ),
+    )
+
+    auth = cli.TokenRefreshAuth("dev", BASE_URL, _seeded_secrets())
+    with httpx.Client(base_url=BASE_URL) as client:
+        client.auth = auth
+        with pytest.raises(cli.TokenRefreshFailed, match="login") as exc:
+            mcp.initialize(client)
+    assert "infrabeat-erp login dev" in str(exc.value)
