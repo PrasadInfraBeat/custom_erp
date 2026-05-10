@@ -2,6 +2,11 @@
 # infrabeat-smoke-test: SSH-side battery for {{TARGET_ENV}}.
 # Generated: {{TIMESTAMP}}
 #
+# Required: $ADMIN_PASSWORD must be set before this script runs.
+# Source from keyring:
+#   export ADMIN_PASSWORD=$(python -m keyring get infrabeat-vm-creds <vm>-admin-password)
+# Where <vm> is one of: dev, staging, production
+#
 # Output protocol: each check emits exactly one line in the format
 #   CHECK_<n>=PASS|FAIL|WARN <latency_ms> <detail>
 # Skill parses these to build the result table. set +e for probes so we
@@ -43,7 +48,7 @@ trap "rm -f ${COOKIE}" EXIT
 T0=$(_now_ms)
 HTTP=$(curl -s -c "${COOKIE}" -o /dev/null -w "%{http_code}" \
     --max-time 10 \
-    -X POST -d "usr=Administrator&pwd=admin123" \
+    -X POST -d "usr=Administrator&pwd=${ADMIN_PASSWORD}" \
     "http://${VM_IP}/api/method/login")
 T1=$(_now_ms)
 LAT=$((T1 - T0))

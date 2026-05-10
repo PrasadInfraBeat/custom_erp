@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import http.cookiejar
 import json
+import os
 import sys
 import urllib.error
 import urllib.parse
@@ -37,7 +38,14 @@ from pathlib import Path
 DEV_BASE = "http://10.1.0.184"
 DEV_SITE = "erp.local"
 ADMIN_USER = "Administrator"
-ADMIN_PASS = "admin123"
+ADMIN_PASS = os.environ.get("ADMIN_PASSWORD")
+if not ADMIN_PASS:
+    raise SystemExit(
+        "ADMIN_PASSWORD env var not set. Populate from keyring before running:\n"
+        "  PowerShell: $env:ADMIN_PASSWORD = python -m keyring get infrabeat-vm-creds dev-admin-password\n"
+        "  Bash:       export ADMIN_PASSWORD=$(python -m keyring get infrabeat-vm-creds dev-admin-password)\n"
+        "See docs/04_VM_INVENTORY.md ?VM Credential Setup for keyring details."
+    )
 TIMEOUT_SEC = 10
 
 # === Endpoints to probe ===================================================
