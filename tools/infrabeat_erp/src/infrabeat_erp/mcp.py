@@ -10,20 +10,25 @@ is the concrete Frappe whitelisted method that FAC routes JSON-RPC calls to.
 The base URL and Bearer token come from the httpx.Client passed in, so this
 module never hardcodes a VM name.
 
-Hardcoded for Phase 6B.3 simplicity. Phase 6E polish will refactor to read
-mcp_endpoint dynamically from /.well-known/openid-configuration discovery,
-matching the Phase 5 mcp_smoke_test.py pattern.
+As of Phase 6E.4, the endpoint is resolved at runtime via OIDC discovery
+(``mcp_endpoint`` key in /.well-known/openid-configuration). The hardcoded
+MCP_ENDPOINT_PATH is retained as a fallback when the key is absent or
+discovery fails, accompanied by a DeprecationWarning.
 """
 
 import itertools
+import warnings
 from dataclasses import dataclass
 from typing import Iterator
 
 import httpx
 
 from infrabeat_erp import __version__
+from .oauth import discover_oidc_metadata
 
 MCP_ENDPOINT_PATH = "/api/method/frappe_assistant_core.api.fac_endpoint.handle_mcp"
+"""Fallback path used when OIDC discovery does not advertise mcp_endpoint."""
+
 PROTOCOL_VERSION = "2024-11-05"
 CLIENT_NAME = "infrabeat-erp"
 
@@ -78,6 +83,38 @@ def _unwrap(body: object) -> dict:
     return {}
 
 
+def _resolve_mcp_endpoint(client: httpx.Client) -> str:
+    """Resolve the MCP endpoint path via OIDC discovery, falling back on miss.
+
+    Reads ``mcp_endpoint`` from the OIDC metadata at the client's base_url.
+    If the key is missing or discovery raises, emits a DeprecationWarning
+    and returns the hardcoded MCP_ENDPOINT_PATH.
+    """
+    base_url = str(client.base_url).rstrip("/")
+    try:
+        metadata = discover_oidc_metadata(base_url)
+    except Exception:
+        warnings.warn(
+            "OIDC discovery failed; falling back to hardcoded mcp_endpoint. "
+            "Upgrade Frappe Assistant Core to advertise mcp_endpoint in "
+            "/.well-known/openid-configuration.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return MCP_ENDPOINT_PATH
+    endpoint = metadata.get("mcp_endpoint")
+    if endpoint:
+        return endpoint
+    warnings.warn(
+        "OIDC metadata did not advertise mcp_endpoint; falling back to "
+        "hardcoded MCP_ENDPOINT_PATH. Upgrade Frappe Assistant Core to "
+        "advertise mcp_endpoint in /.well-known/openid-configuration.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return MCP_ENDPOINT_PATH
+
+
 def _rpc(client: httpx.Client, method: str, params: dict) -> dict:
     """POST a JSON-RPC 2.0 envelope and return the parsed ``result`` dict.
 
@@ -91,7 +128,8 @@ def _rpc(client: httpx.Client, method: str, params: dict) -> dict:
         "method": method,
         "params": params,
     }
-    response = client.post(MCP_ENDPOINT_PATH, json=envelope)
+    endpoint = _resolve_mcp_endpoint(client)
+    response = client.post(endpoint, json=envelope)
     if not (200 <= response.status_code < 300):
         raise MCPError(
             f"HTTP {response.status_code} from MCP endpoint: "
