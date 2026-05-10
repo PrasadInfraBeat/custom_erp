@@ -2,18 +2,18 @@
 
 **Status:** ✅ COMPLETE.
 **Date sealed:** 2026-05-10
-**Closing branch state:** `dev` fast-forwarded through 1 squash-merge (PR #<TBD>). `staging` and `production` untouched.
+**Closing branch state:** `dev` advanced via 1 merge commit (PR #19, merge SHA `98255b0`). `staging` and `production` untouched.
 **Author:** Solo execution session, ~10 minutes, AI-paired via Claude Code.
 
 ---
 
 ## 1. Executive Summary
 
-The local 70-test pytest suite (built up across Phases 6A–6C) was previously enforced only by developer discipline. A contributor could merge a PR that broke tests as long as the existing 5-check CI battery (block-direct-push, python-lint, validate-json, scan-secrets, require-review) passed. Phase 6D promotes pytest to a required CI check on PRs to all three protected branches (`dev`, `staging`, `production`), closing the last gap in the branch-protection scheme. The original 5 checks become 6.
+Phase 6D added a GitHub Actions workflow that runs the local 70-test pytest suite on every PR to `dev`/`staging`/`production`. The workflow uses Python 3.12 on `ubuntu-latest`, installs the package with new `[test]` extras, runs `pytest --cov-fail-under=70`, and uploads HTML coverage as a 14-day workflow artifact.
 
-A coverage gate at 70% acts as a regression sentinel: it fails the build if any PR drops total coverage below the floor. The threshold is deliberately set below the current actual coverage so Phase 7+ feature work has headroom before hitting the gate; the floor is meant to catch *removal* of test coverage, not police every new line. The HTML coverage report is uploaded as a workflow artifact (14-day retention) so a reviewer can inspect file-by-file misses post-run without rerunning locally.
+The CI workflow is **advisory** in its current enforcement posture: it executes on every PR and surfaces pass/fail status, but it cannot platform-block a merge on this repo. GitHub's required-status-check enforcement (via classic branch protection or rulesets) is not available on free-tier private repos. See §7 "Enforcement Posture" for the full state and the Phase 6E roadmap to upgrade to real enforcement at zero recurring cost.
 
-No source or test code was touched in this phase — only CI infrastructure (`.github/workflows/python-tests.yml`), the package's `[test]` optional-dependencies group in `pyproject.toml`, and documentation. The manual post-merge step — adding `pytest (3.12)` as a required check on the three branch protection rules — takes ~90 seconds in the GitHub UI and is documented in §7 below.
+This phase added zero source or test code. The 70-passed/1-skipped local baseline is preserved exactly. The only architectural change is the addition of a workflow file, a `[test]` optional-dependency group in `pyproject.toml`, and the documentation in this closure.
 
 ---
 
@@ -21,7 +21,7 @@ No source or test code was touched in this phase — only CI infrastructure (`.g
 
 | # | PR | Sub-Phase | Squash Hash | Description |
 |---|---|---|---|---|
-| 1 | #<TBD> | 6D | `<TBD>` | GitHub Actions workflow `.github/workflows/python-tests.yml` + `pyproject.toml` test extras + change-log entries + this closure doc |
+| 1 | #19 | 6D | `98255b0` | GitHub Actions workflow `.github/workflows/python-tests.yml` + `pyproject.toml` test extras + change-log entries + this closure doc |
 
 ---
 
@@ -58,7 +58,7 @@ No source or test code was touched in this phase — only CI infrastructure (`.g
 | 3 | `[test]` extras install correctly via `pip install -e .[test]` | Local pre-PR install + CI workflow run | ✅ |
 | 4 | Coverage gate at 70% does not break baseline | Local `pytest --cov-fail-under=70` passes | ✅ |
 | 5 | Local pytest still 70 passed / 1 skipped (no test changes) | Pre-PR `python -m pytest tools/infrabeat_erp/tests/ -q` | ✅ |
-| 6 | Existing 5 CI checks unchanged by this PR | Branch protection rules untouched in code | ✅ |
+| 6 | Existing 5 CI workflow checks unchanged by this PR | The "Branch Protection & Quality Gates" workflow file untouched in this PR | ✅ |
 | 7 | Workflow YAML parses (no syntax errors) | `python -c "import yaml; yaml.safe_load(open('.github/workflows/python-tests.yml'))"` | ✅ |
 | 8 | `pyproject.toml` parses (no syntax errors) | `python -c "import tomllib; tomllib.load(open('tools/infrabeat_erp/pyproject.toml','rb'))"` | ✅ |
 
@@ -76,20 +76,56 @@ Extending the lesson series from `17_PHASE_6C_CLOSURE.md` (which ended at L52).
 
 ---
 
-## 7. Manual Post-Merge Step (NOT in this PR)
+## 7. Enforcement Posture (Critical Architectural Reality)
 
-After PR #<TBD> merges to `dev`, the new `pytest (3.12)` status check must be added to the required-checks list on each of the three protected branches. This is a UI-only step:
+Phase 6D's CI workflow is **advisory**, not platform-enforced. Understanding this distinction is essential for the Phase 6E roadmap.
 
-1. Navigate to: GitHub → Settings → Branches → Branch Protection Rules
-2. For each rule (`dev`, `staging`, `production`):
-   - Edit rule
-   - Under "Require status checks to pass before merging" → "Add" → select `pytest (3.12)`
-   - Save
-3. Verify by opening any subsequent PR and confirming **6 required checks** appear (the original 5 + new pytest)
+### What "advisory" means concretely
 
-**Total time:** ~90 seconds. Cannot be automated within the workflow itself — branch protection is administered via GitHub UI or `gh api` (latter requires device-flow auth, deferred to Phase 6E).
+- ✅ The workflow runs automatically on every PR to `dev`/`staging`/`production`
+- ✅ Pass/fail status is visible in the PR's Checks tab
+- ✅ Coverage gate at 70% surfaces regressions
+- ✅ HTML coverage artifact provides retrospective inspection
+- ❌ A failed workflow does NOT block the GitHub merge button
+- ❌ "Required status check" enforcement is not active
 
-The Phase 6D PR (this PR) will display the new check **once** in its own Checks tab, but it will not block merge until the rule is added — verify the run is green before clicking merge.
+### Why the previous "5 checks" were also advisory
+
+The pre-existing "Branch Protection & Quality Gates" workflow (containing the 5 jobs: Python lint, Secret scan, JSON validate, Block direct pushes, Require approving review) is itself a regular GitHub Actions workflow file. Its name is aspirational. It uses the workflow conventions correctly — the "skipped" status on the "block direct pushes" and "require approving review" jobs reflects no-op execution because there is no rules engine for them to plug into. PR #19 merged successfully despite no platform enforcement; the developer chose to merge after seeing checks green. That is workflow-visibility-driven discipline, not platform enforcement.
+
+### Why platform enforcement is not currently available
+
+GitHub free-tier private repositories do not include required status check enforcement:
+
+- **Classic branch protection on private repos**: required-status-checks feature requires a paid plan (GitHub Pro for personal, GitHub Team or Enterprise for orgs)
+- **Rulesets on private repos**: explicitly require GitHub Team or higher (the `Settings → Rules` page warns about this)
+
+Both restrictions confirmed empirically on this repo at Phase 6D close (2026-05-10).
+
+### Phase 6E Path to Real Enforcement (Recommended: Path B)
+
+| Path | Cost | Steps | Recommendation |
+|---|---|---|---|
+| Path A — GitHub Pro paid plan | ~$4/user/month | Upgrade billing, then standard branch protection | ❌ Rejected — no paid subscriptions |
+| **Path B — Make repo public** | **$0** | **Sanitize committed credentials → flip visibility → configure classic branch protection** | **✅ Recommended** |
+| Path C — Accept advisory CI permanently | $0 | Document advisory-only state; rely on developer discipline | 🟡 Acceptable short-term, suboptimal long-term |
+| Path D — Pre-commit hooks for local enforcement | $0 | Add `.pre-commit-config.yaml` with pytest hook | 🟡 Complementary to others; not a substitute |
+
+Path B is the long-term-optimized choice because:
+1. ERPNext community norm — most `custom_erp`-style apps are public
+2. Free branch protection unlocks immediately on visibility flip
+3. Zero monthly cost
+4. Forces a beneficial credentials sanitization (committed plaintext credentials are bad hygiene regardless of visibility)
+5. Phase 6C defense-in-depth (audit + guards + keyring) is unaffected — the encryption keys live in OS keyring, not in the repo
+
+### Phase 6E Execution Order
+
+1. **6E.1 — Sanitize committed credentials in `docs/04_VM_INVENTORY.md`**: replace plaintext `Erpinfra@123`, `admin123`, etc. with `<stored in keyring service 'infrabeat-vm-creds'; see §VM-Setup>` references. ~20 min.
+2. **6E.2 — Flip repo to public**: GitHub Settings → General → "Change repository visibility" → Public. ~30 sec.
+3. **6E.3 — Configure classic branch protection**: Settings → Branches → Add rule for each of `dev`/`staging`/`production` requiring all 6 status checks (the original 5 + `pytest (3.12)`). ~3 min.
+4. **6E.4 — Existing 6E backlog from §8 below**: L40/L49/L50/master-key/auto-refresh/skills/lint/mypy. ~30 min cumulative.
+
+Total Phase 6E execution: ~55 minutes for full enforcement plus debt retirement.
 
 ---
 
@@ -97,6 +133,7 @@ The Phase 6D PR (this PR) will display the new check **once** in its own Checks 
 
 (Same list as `17_PHASE_6C_CLOSURE.md` §8 — verbatim. No new debt added in Phase 6D.)
 
+- **Repo visibility + credentials sanitization for real enforcement** — committed credentials in `04_VM_INVENTORY.md` (`Erpinfra@123`, `admin123` for 3 VMs) must be sanitized before flipping repo to public. Once public, free GitHub branch protection unlocks; the 6 CI workflow checks become required status checks. See §7 "Enforcement Posture" for full path.
 - L40 `mcp.py` endpoint discovery refactor (consume `mcp_endpoint` from OIDC discovery dynamically)
 - L49 PR template stale "main" branch reference cleanup
 - L50 `.audit/` location migration to user-home (currently CWD-relative)
