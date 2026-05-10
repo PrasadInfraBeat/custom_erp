@@ -233,7 +233,15 @@ If anything is `BACKOFF` or `STOPPED`, see `00_2_GOTCHAS.md` (especially #3 Redi
   - 6E.1.5b Laptop keyring populated: ✅ 9 keys verified
   - 6E.2 repo public: ✅
   - 6E.3 branch ruleset Active: ✅ 6 required checks across 3 branches
-- Phase 6E.4+ debt retirement (L40, L49, L50, master key, auto-refresh, skills, lint, mypy, gh device-flow): ⏳ Planned (next session)
+- Phase 6E.4+ debt retirement (L40, L49, L50, master key, auto-refresh, skill, gh device-flow): ✅ **FULLY SEALED** (`docs/closures/20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md`)
+  - 6E.4 L40 mcp.py dynamic OIDC endpoint discovery: ✅ PR #24 `14bc302`
+  - 6E.5 L49 PR template multi-PR-type fit: ✅ PR #25 `193b43d`
+  - 6E.6 L50 audit log migrated to user-home: ✅ PR #26 `4c81bc7`
+  - 6E.7 gh CLI device-flow auth: ✅ Operational (no PR)
+  - 6E.8 master key keyring service rename: ✅ PR #27 `909f4d5`
+  - 6E.9 token auto-refresh on 401: ✅ PR #28 `1a16671`
+  - 6E.10 Claude Code skill `infrabeat-erp-query`: ✅ PR #29 `0398e50`
+- Phase 6E (BOTH tracks): ✅ **FULLY SEALED 2026-05-10**
 - Phase 7 (InfraBeat Console TUI): ⏳ Planned (per `12_INFRABEAT_CONSOLE_SPEC.md`)
 
 **Working `infrabeat-erp` CLI subcommands** (all read-only; verified live on dev + staging; every invocation auto-audited):
@@ -279,5 +287,6 @@ If anything is `BACKOFF` or `STOPPED`, see `00_2_GOTCHAS.md` (especially #3 Redi
 | 2026-05-10 | **Phase 6E.1 SEALED.** Plaintext legacy admin password reference in System Users table sanitized to keyring placeholder. Authoritative credential setup documented in `04_VM_INVENTORY.md` §VM Credential Setup. | PR #<TBD> |
 | 2026-05-10 | **🔐 Phase 6E enforcement track SEALED.** Squash-only merge convention enforced (6E.0); plaintext credentials sanitized via PR #21 `38047c6` (6E.1); SSH/MariaDB/Admin passwords rotated on Dev/Staging/Production VMs (6E.1.5); 9-key OS keyring service `infrabeat-vm-creds` populated on laptop (6E.1.5b); repo flipped Private→Public (6E.2); branch ruleset "Protected branches (dev/staging/production)" Active with 6 required status checks + 5 protective rules (6E.3). Lessons L54-L65 captured in `19_PHASE_6E_CLOSURE.md`. CI is no longer advisory — Phase 6D's enforcement gap is now closed. | PR #<TBD> |
 | 2026-05-10 | **Phase 6E.10: registered new Claude Code skill `infrabeat-erp-query` at `.claude/skills/infrabeat-erp-query/SKILL.md`.** Teaches Claude WHEN to invoke the `infrabeat-erp` CLI for ERPNext data questions and HOW to format calls (smoke / query / get / describe / search) with VM aliases, `--allow-production` gate, `--json` discipline, and Phase 6E.9 auto-refresh failure handling. Read-only by construction. | PR #<TBD> |
+| 2026-05-10 | **🟢 Phase 6E FULLY SEALED (both tracks).** Enforcement track sealed at PR #21 `38047c6` + closure docs PR #22 (`19_PHASE_6E_CLOSURE.md`). Debt retirement track sealed across PRs #24-#29 retiring L40 / L49 / L50 / master-key separation / token auto-refresh / Claude Code skill, plus operational 6E.7 gh CLI device-flow auth (`20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md`). Pytest baseline grew 70 → 72 → 73 → 75 across the track; no test removed. New lessons L66/L67/L68 captured covering Claude Code `-p` mode mechanics. Phase 7 (InfraBeat Console TUI per `12_INFRABEAT_CONSOLE_SPEC.md`) is now the next major scope. | PR #<TBD> + `20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md` |
 
 ---
