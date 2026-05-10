@@ -120,7 +120,7 @@ Path B is the long-term-optimized choice because:
 
 ### Phase 6E Execution Order
 
-1. **6E.1 — Sanitize committed credentials in `docs/04_VM_INVENTORY.md`**: replace plaintext `Erpinfra@123`, `admin123`, etc. with `<stored in keyring service 'infrabeat-vm-creds'; see §VM-Setup>` references. ~20 min.
+1. **6E.1 — Sanitize committed credentials in `docs/04_VM_INVENTORY.md`**: replace plaintext SSH passwords, MariaDB root passwords, and ERPNext Administrator passwords with `<stored in keyring service 'infrabeat-vm-creds'; see §VM-Setup>` references. ~20 min.
 2. **6E.2 — Flip repo to public**: GitHub Settings → General → "Change repository visibility" → Public. ~30 sec.
 3. **6E.3 — Configure classic branch protection**: Settings → Branches → Add rule for each of `dev`/`staging`/`production` requiring all 6 status checks (the original 5 + `pytest (3.12)`). ~3 min.
 4. **6E.4 — Existing 6E backlog from §8 below**: L40/L49/L50/master-key/auto-refresh/skills/lint/mypy. ~30 min cumulative.
@@ -133,7 +133,7 @@ Total Phase 6E execution: ~55 minutes for full enforcement plus debt retirement.
 
 (Same list as `17_PHASE_6C_CLOSURE.md` §8 — verbatim. No new debt added in Phase 6D.)
 
-- **Repo visibility + credentials sanitization for real enforcement** — committed credentials in `04_VM_INVENTORY.md` (`Erpinfra@123`, `admin123` for 3 VMs) must be sanitized before flipping repo to public. Once public, free GitHub branch protection unlocks; the 6 CI workflow checks become required status checks. See §7 "Enforcement Posture" for full path.
+- **Repo visibility + credentials sanitization for real enforcement** — committed credentials in `04_VM_INVENTORY.md` (legacy plaintext SSH/MariaDB/Admin passwords for 3 VMs) must be sanitized before flipping repo to public. Once public, free GitHub branch protection unlocks; the 6 CI workflow checks become required status checks. See §7 "Enforcement Posture" for full path.
 - L40 `mcp.py` endpoint discovery refactor (consume `mcp_endpoint` from OIDC discovery dynamically)
 - L49 PR template stale "main" branch reference cleanup
 - L50 `.audit/` location migration to user-home (currently CWD-relative)

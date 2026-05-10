@@ -2,7 +2,7 @@
 
 > **CRITICAL:** Every code generation, runbook step, deployment plan, or architectural decision Claude produces must respect these facts EXACTLY. Case-sensitivity matters. VM-specific details matter. These are environment truths that don't change between sessions.
 
-> **Last reconciled 2026-05-10 (Phase 6D closure).** Three-VM architecture authoritative. Production VM (`10.1.0.186`) status flipped from "not provisioned" to "operational" per `15_PHASE_5_CLOSURE.md` §10. Dev and Staging FAC empirically at `2.0.0` (verified live this session); Production claimed `2.4.1` per Phase 5, pending re-verification in 6C.4. Phase 6D GitHub Actions pytest CI gate sealed; new `dev` tip at `98255b0` (placeholder — filled post-merge). See `04_VM_INVENTORY.md` for per-VM operational detail; this file is the project-wide canonical truth. Document change log at end.
+> **Last reconciled 2026-05-10 (Phase 6D closure).** Three-VM architecture authoritative. Production VM (`10.1.0.186`) status flipped from "not provisioned" to "operational" per `15_PHASE_5_CLOSURE.md` §10. Dev and Staging FAC empirically at `2.0.0` (verified live this session); Production claimed `2.4.1` per Phase 5, pending re-verification in 6C.4. Phase 6D GitHub Actions pytest CI gate sealed at `dev` tip `98255b0`. Current dev tip: `<6E1_MERGE_SHA>` (Phase 6E.1 sanitization merge; backfilled post-merge). See `04_VM_INVENTORY.md` for per-VM operational detail; this file is the project-wide canonical truth. Document change log at end.
 
 ---
 
@@ -62,7 +62,7 @@ InfraBeat operates **three** environment VMs, all on subnet `10.1.0.0/24`. Each 
 | `erpadmin` | sudo / SSH login | Service management on all VMs (`sudo supervisorctl`), system installs (`apt install`), nginx config. **SSH login user on all three VMs.** |
 | `frappe` | application user (Dev VM only) | Bench commands, git operations, DocType operations on **Dev VM only** (path `/home/frappe/frappe-bench/`) |
 | `erpadmin` (as bench user) | application user (Staging + Prod) | Bench commands, git operations on **Staging and Production** (path `/home/erpadmin/frappe-bench/`) |
-| `Administrator` | ERPNext super admin (in-app) | Full access in ERPNext UI; password `admin123` (rotate before prod write operations) |
+| `Administrator` | ERPNext super admin (in-app) | Full access in ERPNext UI; password stored per-VM in keyring service `infrabeat-vm-creds` (see `04_VM_INVENTORY.md` §VM Credential Setup). Rotated post-Phase 6E.1.5 to invalidate any historical exposure. |
 
 **Switch users on Dev VM:** `sudo su - frappe` (real hyphen, NOT em-dash — paste-mangling has caused this to fail historically)
 
@@ -269,5 +269,6 @@ If anything is `BACKOFF` or `STOPPED`, see `00_2_GOTCHAS.md` (especially #3 Redi
 | 2026-05-09 | Network topology updated (laptop subnet `10.1.1.0/24` vs VMs `10.1.0.0/24` via inter-subnet routing). | Network probe 2026-05-09 |
 | 2026-05-09 | **Phase 6C.3 audit log merged on `dev` at `5184710` (PR #13).** Added FAC State audit-capture rows per VM. Updated security defaults bullet. Updated phase status. Added 9-field audit record schema. Test count 46→51. Documented test-pollution debt for Phase 6E. | PR #13 squash merge |
 | 2026-05-10 | **🟢 Phase 6D SEALED. Advisory CI pytest gate active (workflow runs but does not block merge — free private repo limitation). Phase 6E will path to real enforcement via repo-public + credentials sanitization.** Workflow `.github/workflows/python-tests.yml` runs on every PR to `dev`/`staging`/`production`. Coverage gate at 70%. Test count unchanged at 70 passed / 1 skipped. | PR #19 + `docs/closures/18_PHASE_6D_CLOSURE.md` + `docs/closures/18_PHASE_6D_CLOSURE.md §7` |
+| 2026-05-10 | **Phase 6E.1 SEALED.** Plaintext legacy admin password reference in System Users table sanitized to keyring placeholder. Authoritative credential setup documented in `04_VM_INVENTORY.md` §VM Credential Setup. | PR #<TBD> |
 
 ---

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import http.cookiejar
 import json
+import os
 import sys
 import urllib.error
 import urllib.parse
@@ -33,7 +34,14 @@ DEFAULT_VM = "dev"
 DEFAULT_CLIENT_NAME = "infrabeat-erp"
 DEFAULT_REDIRECT_URI = "http://localhost:8765/callback"
 ADMIN_USER = "Administrator"
-ADMIN_PASS = "admin123"
+ADMIN_PASS = os.environ.get("ADMIN_PASSWORD")
+if not ADMIN_PASS:
+    raise SystemExit(
+        "ADMIN_PASSWORD env var not set. Populate from keyring before running:\n"
+        "  PowerShell: $env:ADMIN_PASSWORD = python -m keyring get infrabeat-vm-creds dev-admin-password\n"
+        "  Bash:       export ADMIN_PASSWORD=$(python -m keyring get infrabeat-vm-creds dev-admin-password)\n"
+        "See docs/04_VM_INVENTORY.md ?VM Credential Setup for keyring details."
+    )
 TIMEOUT_SEC = 15
 
 

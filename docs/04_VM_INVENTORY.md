@@ -15,13 +15,13 @@
 | **Status** | ✅ FULLY OPERATIONAL |
 | **OS** | Ubuntu 22.04.5 LTS |
 | **SSH user** | `erpadmin` |
-| **SSH password** | `Erpinfra@123` |
+| **SSH password** | `<keyring: dev-ssh-password>` (see [§VM Credential Setup](#-vm-credential-setup)) |
 | **Bench path** | `/home/frappe/frappe-bench/` |
 | **Bench user** | `frappe` |
 | **Site name** | `erp.local` |
 | **Web URL** | `http://10.1.0.184` |
-| **Admin login** | `Administrator / admin123` |
-| **MariaDB root** | `Erpinfra@123` |
+| **Admin login** | `Administrator` / `<keyring: dev-admin-password>` (see [§VM Credential Setup](#-vm-credential-setup)) |
+| **MariaDB root** | `<keyring: dev-mariadb-root>` (see [§VM Credential Setup](#-vm-credential-setup)) |
 | **Git branch** | `dev` (auto-deploys on push) |
 | **Mode** | bench dev (`bench start`) |
 
@@ -76,12 +76,12 @@
 | **Status** | ✅ FULLY OPERATIONAL (Stage 1A closed; Phase 6C kickoff verified) |
 | **OS** | Ubuntu 22.04 LTS |
 | **SSH user** | `erpadmin` |
-| **SSH password** | `Erpinfra@123` |
+| **SSH password** | `<keyring: staging-ssh-password>` (see [§VM Credential Setup](#-vm-credential-setup)) |
 | **Bench path** | `/home/erpadmin/frappe-bench/` ⚠ DIFFERENT FROM DEV |
 | **Bench user** | `erpadmin` ⚠ DIFFERENT FROM DEV |
 | **Site name** | `erp.staging` ⚠ DIFFERENT FROM DEV |
 | **Web URL** | `http://10.1.0.185` |
-| **Admin login** | `Administrator / admin123` |
+| **Admin login** | `Administrator` / `<keyring: staging-admin-password>` (see [§VM Credential Setup](#-vm-credential-setup)) |
 | **Git branch** | `staging` (manual promote from dev) |
 | **Mode** | Production (nginx + supervisor) |
 
@@ -123,12 +123,12 @@
 | **Status** | ✅ FULLY OPERATIONAL (Phase 5 verified — pending Phase 6C.4 re-verification) |
 | **OS** | Ubuntu 22.04 LTS |
 | **SSH user** | `erpadmin` |
-| **SSH password** | `Erpinfra@123` ⚠ ROTATE BEFORE FIRST WRITE OPERATION |
+| **SSH password** | `<keyring: production-ssh-password>` (see [§VM Credential Setup](#-vm-credential-setup)) ⚠ ROTATE BEFORE FIRST WRITE OPERATION |
 | **Bench path** | `/home/erpadmin/frappe-bench/` (mirrors staging) |
 | **Bench user** | `erpadmin` |
 | **Site name** | `erp.production` |
 | **Web URL** | `http://10.1.0.186` |
-| **Admin login** | `Administrator / admin123` (rotate before first write) |
+| **Admin login** | `Administrator` / `<keyring: production-admin-password>` (see [§VM Credential Setup](#-vm-credential-setup)) (rotate before first write) |
 | **Git branch** | `production` (manual promote from staging + backup gate) |
 | **Mode** | Production (nginx + supervisor) |
 
@@ -224,6 +224,81 @@ When Claude is using `infrabeat-erp` CLI:
 
 ---
 
+## 🔐 VM Credential Setup
+
+> **Why this exists (Phase 6E.1, 2026-05-10):** Plaintext VM credentials were previously committed across multiple docs in this repo. As a precondition for flipping the repo from private to public (Phase 6E.2), all plaintext credentials were sanitized to keyring-reference placeholders. Phase 6E.1.5 rotates the actual credentials on each VM so that historical git commits (which retain the old plaintext values) reference invalidated secrets.
+
+All credentials referenced as `<keyring: <key-name>>` throughout this repo live in OS keyring service `infrabeat-vm-creds`. Populate them once per laptop using the commands below.
+
+### Required Keyring Keys (9 total)
+
+| Key | What it stores |
+|---|---|
+| `dev-ssh-password` | SSH password for `erpadmin@10.1.0.184` |
+| `dev-mariadb-root` | MariaDB `root` password on Dev VM |
+| `dev-admin-password` | ERPNext `Administrator` password on Dev VM (`erp.local`) |
+| `staging-ssh-password` | SSH password for `erpadmin@10.1.0.185` |
+| `staging-mariadb-root` | MariaDB `root` password on Staging VM |
+| `staging-admin-password` | ERPNext `Administrator` password on Staging VM (`erp.staging`) |
+| `production-ssh-password` | SSH password for `erpadmin@10.1.0.186` |
+| `production-mariadb-root` | MariaDB `root` password on Production VM |
+| `production-admin-password` | ERPNext `Administrator` password on Production VM (`erp.production`) |
+
+### One-Time Population (PowerShell, on laptop)
+
+After rotating credentials per Phase 6E.1.5 SSH runbook, run these commands once to seed your local keyring. Replace `<NEW_VALUE>` with the actual rotated value for each key.
+
+```powershell
+# Dev VM
+python -m keyring set infrabeat-vm-creds dev-ssh-password
+# (paste new SSH password when prompted)
+python -m keyring set infrabeat-vm-creds dev-mariadb-root
+python -m keyring set infrabeat-vm-creds dev-admin-password
+
+# Staging VM
+python -m keyring set infrabeat-vm-creds staging-ssh-password
+python -m keyring set infrabeat-vm-creds staging-mariadb-root
+python -m keyring set infrabeat-vm-creds staging-admin-password
+
+# Production VM
+python -m keyring set infrabeat-vm-creds production-ssh-password
+python -m keyring set infrabeat-vm-creds production-mariadb-root
+python -m keyring set infrabeat-vm-creds production-admin-password
+```
+
+### Retrieval
+
+To use a credential in a shell command:
+
+```powershell
+# PowerShell
+$env:ADMIN_PASSWORD = python -m keyring get infrabeat-vm-creds dev-admin-password
+curl.exe -u "Administrator:$env:ADMIN_PASSWORD" http://10.1.0.184/api/method/ping
+```
+
+```bash
+# Bash (e.g., on a VM after rotation, with python+keyring installed)
+export ADMIN_PASSWORD=$(python -m keyring get infrabeat-vm-creds dev-admin-password)
+curl -u "Administrator:$ADMIN_PASSWORD" http://10.1.0.184/api/method/ping
+```
+
+### Verification
+
+```powershell
+python -m keyring get infrabeat-vm-creds dev-ssh-password
+```
+
+Should output the rotated password. If it returns nothing, run the corresponding `set` command above.
+
+### Relationship to `infrabeat-erp` CLI Keyring
+
+This is a SEPARATE keyring service from `infrabeat-erp` (which holds OAuth `client_id`/`access_token`/`refresh_token` per Phase 6C.1). The two services are intentionally isolated:
+
+- `infrabeat-erp` service — CLI runtime credentials (auto-managed by CLI)
+- `infrabeat-vm-creds` service — Operator credentials for SSH/MariaDB/ERPNext-Admin (manually populated after rotation)
+
+---
+
 ## 📜 Document Change Log
 
 | Date | Change | Source of truth |
@@ -238,5 +313,6 @@ When Claude is using `infrabeat-erp` CLI:
 | 2026-05-09 | Added laptop subnet (`10.1.1.0/24`) note in Network Topology — inter-subnet routing observation. | Network probe 2026-05-09 |
 | 2026-05-09 | Flagged `~/.ssh/github_pat` does-not-exist drift vs `05_GITHUB_WORKFLOW.md`. Noted `gh` CLI installed but device-flow auth incomplete. | Filesystem check 2026-05-09 |
 | 2026-05-10 | **Phase 6D SEALED.** GitHub Actions pytest CI gate added. No VM state change — CI runs on GitHub-hosted runners (`ubuntu-latest`), not on the three project VMs. FAC parity (`2.0.0`/17 tools) unchanged. | `docs/closures/18_PHASE_6D_CLOSURE.md` |
+| 2026-05-10 | **🔐 Phase 6E.1 SEALED. Credentials sanitized for repo-public readiness.** All plaintext legacy SSH password and legacy admin password occurrences across `04_VM_INVENTORY.md` and `docs/00_1_PROJECT_FACTS.md` replaced with `<keyring: <key-name>>` placeholders pointing to OS keyring service `infrabeat-vm-creds`. New §VM Credential Setup section added with 9 required keys + population commands. Phase 6E.1.5 (SSH credential rotation on 3 VMs) is the next gate before Phase 6E.2 repo-public flip. | PR #<TBD> |
 
 ---
