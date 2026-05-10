@@ -1,8 +1,10 @@
 """JSONL audit log for every infrabeat-erp CLI invocation (Phase 6C.3).
 
-Captures one JSON record per invocation under <cwd>/.audit/<YYYY-MM-DD>.jsonl,
-mirroring the existing .secrets/ CWD-relative pattern. Phase 6E will promote
-both .secrets/ and .audit/ to user-home; for now stay CWD-relative.
+Captures one JSON record per invocation under a platform-appropriate user-home
+directory: ~/.local/share/infrabeat-erp/audit/<YYYY-MM-DD>.jsonl on Linux/macOS
+and %APPDATA%/infrabeat-erp/audit/<YYYY-MM-DD>.jsonl on Windows. Phase 6E.6
+(L50) moved this off the CWD-relative .audit/ path to stop polluting the repo
+root when CLI tests run via CliRunner.
 
 Stdlib only - no click imports - so Phase 7 InfraBeat Console code can read
 these JSONL files for the audit viewer pane without dragging the CLI in.
@@ -22,16 +24,20 @@ from datetime import datetime, timezone
 from importlib import metadata as _metadata
 from pathlib import Path
 
-_AUDIT_DIRNAME = ".audit"
 
-
-def _audit_dir() -> Path:
-    return Path.cwd() / _AUDIT_DIRNAME
+def _get_audit_dir() -> Path:
+    """Return the platform-appropriate user-home directory for audit logs."""
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA") or str(
+            Path.home() / "AppData" / "Roaming"
+        )
+        return Path(appdata) / "infrabeat-erp" / "audit"
+    return Path.home() / ".local" / "share" / "infrabeat-erp" / "audit"
 
 
 def _audit_file_for_today() -> Path:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return _audit_dir() / f"{today}.jsonl"
+    return _get_audit_dir() / f"{today}.jsonl"
 
 
 def _resolve_user() -> str:

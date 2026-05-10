@@ -14,11 +14,22 @@ def _today_filename() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d") + ".jsonl"
 
 
+@pytest.fixture(autouse=True)
+def _redirect_audit_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """Redirect _get_audit_dir() to a per-test tmp_path to prevent CWD/user-home pollution."""
+    audit_root = tmp_path / "audit"
+    monkeypatch.setattr(
+        "infrabeat_erp.audit._get_audit_dir", lambda: audit_root
+    )
+    return audit_root
+
+
 def test_audit_dir_created_on_first_write(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    _redirect_audit_dir,
 ) -> None:
-    """First write_audit_record auto-creates .audit/ under cwd."""
-    monkeypatch.chdir(tmp_path)
+    """First write_audit_record auto-creates the audit dir under the redirected root."""
     record = audit.build_audit_record(
         subcommand="smoke",
         vm="dev",
@@ -28,7 +39,7 @@ def test_audit_dir_created_on_first_write(
     )
     audit.write_audit_record(record)
 
-    audit_dir = tmp_path / ".audit"
+    audit_dir = _redirect_audit_dir
     assert audit_dir.is_dir()
     audit_file = audit_dir / _today_filename()
     assert audit_file.is_file()
@@ -38,7 +49,7 @@ def test_audit_dir_created_on_first_write(
     assert parsed["subcommand"] == "smoke"
 
 
-def test_audit_record_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_audit_record_shape() -> None:
     """build_audit_record returns exactly the 9 documented keys with correct types."""
     record = audit.build_audit_record(
         subcommand="query",
@@ -91,12 +102,10 @@ def test_audit_record_isoformat() -> None:
 
 
 def test_audit_write_failure_warns_and_returns(
-    tmp_path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
     """Write errors print 'audit warning:' to stderr and never raise."""
-    monkeypatch.chdir(tmp_path)
     real_open = builtins.open
 
     def boom(path, *args, **kwargs):
@@ -116,15 +125,14 @@ def test_audit_write_failure_warns_and_returns(
 
 
 def test_audit_invoked_via_cli(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    _redirect_audit_dir,
 ) -> None:
     """CliRunner --help invocation produces exactly one JSONL audit record."""
-    monkeypatch.chdir(tmp_path)
     runner = CliRunner()
     result = runner.invoke(cli.main, ["--help"])
     assert result.exit_code == 0
 
-    audit_file = tmp_path / ".audit" / _today_filename()
+    audit_file = _redirect_audit_dir / _today_filename()
     assert audit_file.is_file()
     lines = audit_file.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
