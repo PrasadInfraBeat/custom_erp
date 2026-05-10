@@ -2,7 +2,7 @@
 
 > **CRITICAL:** Every code generation, runbook step, deployment plan, or architectural decision Claude produces must respect these facts EXACTLY. Case-sensitivity matters. VM-specific details matter. These are environment truths that don't change between sessions.
 
-> **Last reconciled 2026-05-10 (Phase 6D closure).** Three-VM architecture authoritative. Production VM (`10.1.0.186`) status flipped from "not provisioned" to "operational" per `15_PHASE_5_CLOSURE.md` §10. Dev and Staging FAC empirically at `2.0.0` (verified live this session); Production claimed `2.4.1` per Phase 5, pending re-verification in 6C.4. Phase 6D GitHub Actions pytest CI gate sealed; new `dev` tip at `<6D_MERGE_SHA>` (placeholder — filled post-merge). See `04_VM_INVENTORY.md` for per-VM operational detail; this file is the project-wide canonical truth. Document change log at end.
+> **Last reconciled 2026-05-10 (Phase 6D closure).** Three-VM architecture authoritative. Production VM (`10.1.0.186`) status flipped from "not provisioned" to "operational" per `15_PHASE_5_CLOSURE.md` §10. Dev and Staging FAC empirically at `2.0.0` (verified live this session); Production claimed `2.4.1` per Phase 5, pending re-verification in 6C.4. Phase 6D GitHub Actions pytest CI gate sealed; new `dev` tip at `98255b0` (placeholder — filled post-merge). See `04_VM_INVENTORY.md` for per-VM operational detail; this file is the project-wide canonical truth. Document change log at end.
 
 ---
 
@@ -245,7 +245,7 @@ If anything is `BACKOFF` or `STOPPED`, see `00_2_GOTCHAS.md` (especially #3 Redi
 
 **Test posture:** 52 tests collected, 51 passing, 1 skipped (POSIX-only `secrets_store` mode-bit test, correctly bypassed on Windows). Audit module added 5 tests in 6C.3; existing 46 unchanged. Live integration smoke per `16_PHASE_6B_CLOSURE.md` §11 + this session's verification of dev + staging.
 
-**Branch protection:** 5-check CI on every PR (block direct pushes, Python lint, JSON validate, secret scan, require approving review). The `Require approving review` check shows as "failing/pending" until the solo developer self-approves — that's the lifecycle, not a CI bug. PR #13 (6C.3 merge) all 5 checks green. CI pytest gate active on PRs to all three branches (Phase 6D, PR #<TBD>).
+**Branch protection:** 5-check CI on every PR (block direct pushes, Python lint, JSON validate, secret scan, require approving review). The `Require approving review` check shows as "failing/pending" until the solo developer self-approves — that's the lifecycle, not a CI bug. PR #13 (6C.3 merge) all 5 checks green. Advisory CI pytest gate active on PRs to all three branches (Phase 6D, PR #19; not platform-enforced — see `docs/closures/18_PHASE_6D_CLOSURE.md` §7 for enforcement posture and Phase 6E path).
 
 **Known debt:**
 - Test runs write audit records to `<repo-root>/.audit/<today>.jsonl` because existing CliRunner-based tests in `test_cli.py` don't `chdir` to `tmp_path`. Cosmetic only (`.gitignore` covers it; never committed). Phase 6E user-home migration of `.audit/` eliminates structurally.
@@ -268,6 +268,6 @@ If anything is `BACKOFF` or `STOPPED`, see `00_2_GOTCHAS.md` (especially #3 Redi
 | 2026-05-09 | Added 5-check CI lifecycle clarification (the "approving review" check is solo-dev self-approval, not a CI bug). | Live PR #12 + PR #13 inspection 2026-05-09 |
 | 2026-05-09 | Network topology updated (laptop subnet `10.1.1.0/24` vs VMs `10.1.0.0/24` via inter-subnet routing). | Network probe 2026-05-09 |
 | 2026-05-09 | **Phase 6C.3 audit log merged on `dev` at `5184710` (PR #13).** Added FAC State audit-capture rows per VM. Updated security defaults bullet. Updated phase status. Added 9-field audit record schema. Test count 46→51. Documented test-pollution debt for Phase 6E. | PR #13 squash merge |
-| 2026-05-10 | **🟢 Phase 6D SEALED. GitHub Actions pytest CI gate active.** Workflow `.github/workflows/python-tests.yml` runs on every PR to `dev`/`staging`/`production`. Coverage gate at 70%. Test count unchanged at 70 passed / 1 skipped. | PR #<TBD> + `docs/closures/18_PHASE_6D_CLOSURE.md` |
+| 2026-05-10 | **🟢 Phase 6D SEALED. Advisory CI pytest gate active (workflow runs but does not block merge — free private repo limitation). Phase 6E will path to real enforcement via repo-public + credentials sanitization.** Workflow `.github/workflows/python-tests.yml` runs on every PR to `dev`/`staging`/`production`. Coverage gate at 70%. Test count unchanged at 70 passed / 1 skipped. | PR #19 + `docs/closures/18_PHASE_6D_CLOSURE.md` + `docs/closures/18_PHASE_6D_CLOSURE.md §7` |
 
 ---
