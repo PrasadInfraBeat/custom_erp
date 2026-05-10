@@ -18,7 +18,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8", "pytest-mock>=3", "respx>=0.21"]
+test = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "pytest-mock>=3",
+    "anyio>=4",
+    "respx>=0.20",
+]
 
 [project.scripts]
 infrabeat-erp = "infrabeat_erp.cli:main"

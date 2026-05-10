@@ -237,5 +237,6 @@ When Claude is using `infrabeat-erp` CLI:
 | 2026-05-09 | **Phase 6C.3 merged on `dev` at commit `5184710` (PR #13).** Audit log infrastructure active for every CLI invocation. Updated FAC State tables to reflect audit capture. Updated production safety rule #4. | PR #13 squash merge |
 | 2026-05-09 | Added laptop subnet (`10.1.1.0/24`) note in Network Topology — inter-subnet routing observation. | Network probe 2026-05-09 |
 | 2026-05-09 | Flagged `~/.ssh/github_pat` does-not-exist drift vs `05_GITHUB_WORKFLOW.md`. Noted `gh` CLI installed but device-flow auth incomplete. | Filesystem check 2026-05-09 |
+| 2026-05-10 | **Phase 6D SEALED.** GitHub Actions pytest CI gate added. No VM state change — CI runs on GitHub-hosted runners (`ubuntu-latest`), not on the three project VMs. FAC parity (`2.0.0`/17 tools) unchanged. | `docs/closures/18_PHASE_6D_CLOSURE.md` |
 
 ---
