@@ -2,7 +2,7 @@
 
 > **CRITICAL:** Every code generation, runbook step, deployment plan, or architectural decision Claude produces must respect these facts EXACTLY. Case-sensitivity matters. VM-specific details matter. These are environment truths that don't change between sessions.
 
-> **Last reconciled 2026-05-10 (Phase 6D closure).** Three-VM architecture authoritative. Production VM (`10.1.0.186`) status flipped from "not provisioned" to "operational" per `15_PHASE_5_CLOSURE.md` §10. Dev and Staging FAC empirically at `2.0.0` (verified live this session); Production claimed `2.4.1` per Phase 5, pending re-verification in 6C.4. Phase 6D GitHub Actions pytest CI gate sealed at `dev` tip `98255b0`. Current dev tip: `<6E1_MERGE_SHA>` (Phase 6E.1 sanitization merge; backfilled post-merge). See `04_VM_INVENTORY.md` for per-VM operational detail; this file is the project-wide canonical truth. Document change log at end.
+> **Last reconciled 2026-05-10 (Phase 6E closure).** Three-VM architecture authoritative. Production VM (`10.1.0.186`) status flipped from "not provisioned" to "operational" per `15_PHASE_5_CLOSURE.md` §10. Dev and Staging FAC empirically at `2.0.0` (verified live this session); Production claimed `2.4.1` per Phase 5, pending re-verification in 6C.4. Phase 6D GitHub Actions pytest CI gate sealed at `dev` tip `98255b0`. Current `dev` tip: **`<6E_CLOSURE_MERGE_SHA>`** (Phase 6E closure docs PR; Phase 6E enforcement track sealed at `38047c6`). See `04_VM_INVENTORY.md` for per-VM operational detail; this file is the project-wide canonical truth. Document change log at end.
 
 ---
 
@@ -226,7 +226,14 @@ If anything is `BACKOFF` or `STOPPED`, see `00_2_GOTCHAS.md` (especially #3 Redi
 - Phase 6C.1 (keyring promotion): ⏳ Planned after 6C.2
 - Phase 6C.4 (closure smoke against staging + prod FAC re-verification): ⏳ Planned after 6C.1
 - Phase 6D (CI integration via GitHub Actions for pytest): ✅ **SEALED** (`docs/closures/18_PHASE_6D_CLOSURE.md`)
-- Phase 6E (custom skills + L40 endpoint discovery debt retirement + FAC version reconciliation + `.secrets/` and `.audit/` user-home migration): ⏳ Planned
+- Phase 6E enforcement track (squash + sanitization + rotation + keyring + public + branch protection): ✅ **SEALED** (`docs/closures/19_PHASE_6E_CLOSURE.md`)
+  - 6E.0 squash-only enforced: ✅ Repo settings
+  - 6E.1 docs sanitized: ✅ PR #21 `38047c6`
+  - 6E.1.5 VM credentials rotated: ✅ Dev/Staging/Production
+  - 6E.1.5b Laptop keyring populated: ✅ 9 keys verified
+  - 6E.2 repo public: ✅
+  - 6E.3 branch ruleset Active: ✅ 6 required checks across 3 branches
+- Phase 6E.4+ debt retirement (L40, L49, L50, master key, auto-refresh, skills, lint, mypy, gh device-flow): ⏳ Planned (next session)
 - Phase 7 (InfraBeat Console TUI): ⏳ Planned (per `12_INFRABEAT_CONSOLE_SPEC.md`)
 
 **Working `infrabeat-erp` CLI subcommands** (all read-only; verified live on dev + staging; every invocation auto-audited):
@@ -270,5 +277,6 @@ If anything is `BACKOFF` or `STOPPED`, see `00_2_GOTCHAS.md` (especially #3 Redi
 | 2026-05-09 | **Phase 6C.3 audit log merged on `dev` at `5184710` (PR #13).** Added FAC State audit-capture rows per VM. Updated security defaults bullet. Updated phase status. Added 9-field audit record schema. Test count 46→51. Documented test-pollution debt for Phase 6E. | PR #13 squash merge |
 | 2026-05-10 | **🟢 Phase 6D SEALED. Advisory CI pytest gate active (workflow runs but does not block merge — free private repo limitation). Phase 6E will path to real enforcement via repo-public + credentials sanitization.** Workflow `.github/workflows/python-tests.yml` runs on every PR to `dev`/`staging`/`production`. Coverage gate at 70%. Test count unchanged at 70 passed / 1 skipped. | PR #19 + `docs/closures/18_PHASE_6D_CLOSURE.md` + `docs/closures/18_PHASE_6D_CLOSURE.md §7` |
 | 2026-05-10 | **Phase 6E.1 SEALED.** Plaintext legacy admin password reference in System Users table sanitized to keyring placeholder. Authoritative credential setup documented in `04_VM_INVENTORY.md` §VM Credential Setup. | PR #<TBD> |
+| 2026-05-10 | **🔐 Phase 6E enforcement track SEALED.** Squash-only merge convention enforced (6E.0); plaintext credentials sanitized via PR #21 `38047c6` (6E.1); SSH/MariaDB/Admin passwords rotated on Dev/Staging/Production VMs (6E.1.5); 9-key OS keyring service `infrabeat-vm-creds` populated on laptop (6E.1.5b); repo flipped Private→Public (6E.2); branch ruleset "Protected branches (dev/staging/production)" Active with 6 required status checks + 5 protective rules (6E.3). Lessons L54-L65 captured in `19_PHASE_6E_CLOSURE.md`. CI is no longer advisory — Phase 6D's enforcement gap is now closed. | PR #<TBD> |
 
 ---
