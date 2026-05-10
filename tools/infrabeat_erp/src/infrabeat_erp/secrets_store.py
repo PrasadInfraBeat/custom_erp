@@ -30,7 +30,19 @@ SECRETS_DIR_MODE = 0o700
 SECRETS_FILE_MODE = 0o600
 
 KEYRING_SERVICE = "infrabeat-erp"
-MASTER_KEY_USER = "__master__"
+
+# Phase 6E.8: master key now lives in a dedicated keyring service so the
+# encryption key is namespaced separately from per-VM OAuth token entries
+# stored under KEYRING_SERVICE. The OLD_* constants are retained as a
+# read-only fallback for installs that still hold a key under the
+# legacy location; on first read we auto-migrate it to the new location
+# and intentionally leave the old entry in place as a rollback safety net.
+NEW_KEYRING_SERVICE_MASTER = "infrabeat-erp-master"
+NEW_KEYRING_USERNAME_MASTER = "master"
+OLD_KEYRING_SERVICE_MASTER = "infrabeat-erp"
+OLD_KEYRING_USERNAME_MASTER = "__master__"
+
+MASTER_KEY_USER = OLD_KEYRING_USERNAME_MASTER
 MASTER_KEY_ENV = "INFRABEAT_MASTER_KEY"
 MASTER_KEY_FILE = Path.home() / ".config" / "infrabeat-erp" / "master.key"
 
@@ -195,22 +207,47 @@ def _resolve_master_key() -> bytes:
     Resolution order:
         1. INFRABEAT_MASTER_KEY env var (overrides everything; used by
            tests and by users on locked-down systems).
-        2. keyring entry service='infrabeat-erp', username='__master__'.
-        3. ~/.config/infrabeat-erp/master.key file (mode 0o600 on POSIX).
-        4. Generate 32 random bytes (base64-urlsafe encoded), store in
-           keyring; if keyring fails, write to the master key file; if
-           both fail, raise SecretsBackendUnavailable.
+        2. keyring entry service='infrabeat-erp-master', username='master'
+           (NEW location; Phase 6E.8).
+        3. keyring entry service='infrabeat-erp', username='__master__'
+           (OLD location, read-only fallback). On hit, the value is
+           auto-written to the NEW location; the OLD entry is left in
+           place as a rollback safety net.
+        4. ~/.config/infrabeat-erp/master.key file (mode 0o600 on POSIX).
+        5. Generate 32 random bytes (base64-urlsafe encoded), store at
+           the NEW keyring location; if keyring fails, write to the
+           master key file; if both fail, raise SecretsBackendUnavailable.
     """
     env_value = os.environ.get(MASTER_KEY_ENV)
     if env_value:
         return env_value.encode("ascii")
 
     try:
-        from_keyring = keyring.get_password(KEYRING_SERVICE, MASTER_KEY_USER)
+        from_keyring = keyring.get_password(
+            NEW_KEYRING_SERVICE_MASTER, NEW_KEYRING_USERNAME_MASTER
+        )
     except Exception:
         from_keyring = None
     if from_keyring:
         return from_keyring.encode("ascii")
+
+    try:
+        from_legacy = keyring.get_password(
+            OLD_KEYRING_SERVICE_MASTER, OLD_KEYRING_USERNAME_MASTER
+        )
+    except Exception:
+        from_legacy = None
+    if from_legacy:
+        # Auto-migrate to the new location; do not delete the old entry.
+        try:
+            keyring.set_password(
+                NEW_KEYRING_SERVICE_MASTER,
+                NEW_KEYRING_USERNAME_MASTER,
+                from_legacy,
+            )
+        except Exception:
+            pass
+        return from_legacy.encode("ascii")
 
     try:
         if MASTER_KEY_FILE.exists():
@@ -224,7 +261,11 @@ def _resolve_master_key() -> bytes:
     new_key_str = new_key.decode("ascii")
 
     try:
-        keyring.set_password(KEYRING_SERVICE, MASTER_KEY_USER, new_key_str)
+        keyring.set_password(
+            NEW_KEYRING_SERVICE_MASTER,
+            NEW_KEYRING_USERNAME_MASTER,
+            new_key_str,
+        )
         return new_key
     except Exception:
         pass

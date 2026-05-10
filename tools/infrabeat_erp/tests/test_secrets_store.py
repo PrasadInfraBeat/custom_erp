@@ -198,3 +198,45 @@ def test_migrate_no_source(tmp_path: Path) -> None:
     status = secrets_store.migrate("dev", base_dir=tmp_path)
     assert status == "no-source"
     assert not secrets_store.is_migrated("dev", base_dir=tmp_path)
+
+
+# === Phase 6E.8 MASTER-KEY KEYRING-SERVICE RENAME =========================
+
+
+def test_master_key_migrates_from_legacy_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A master key found at the OLD service+username is auto-promoted
+    to the NEW dedicated service+username on first read, and the OLD
+    entry is intentionally retained as a rollback safety net."""
+    store = _fake_keyring(monkeypatch)
+    monkeypatch.delenv("INFRABEAT_MASTER_KEY", raising=False)
+
+    legacy_key = _TEST_MASTER_KEY
+    store[
+        (
+            secrets_store.OLD_KEYRING_SERVICE_MASTER,
+            secrets_store.OLD_KEYRING_USERNAME_MASTER,
+        )
+    ] = legacy_key
+
+    new_loc = (
+        secrets_store.NEW_KEYRING_SERVICE_MASTER,
+        secrets_store.NEW_KEYRING_USERNAME_MASTER,
+    )
+    assert new_loc not in store
+
+    resolved = secrets_store._resolve_master_key()
+
+    assert resolved == legacy_key.encode("ascii")
+    assert store[new_loc] == legacy_key
+    # OLD entry must NOT be deleted; safety net for rollback.
+    assert (
+        store[
+            (
+                secrets_store.OLD_KEYRING_SERVICE_MASTER,
+                secrets_store.OLD_KEYRING_USERNAME_MASTER,
+            )
+        ]
+        == legacy_key
+    )
