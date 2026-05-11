@@ -1,3 +1,5 @@
+
+| 2026-05-11 | **Task E COMPLETE**: F1 resolved via `gh auth login --web` (browser OAuth, token in keyring). F3 retraction: doctor confirms all 9 VM creds present. `infrabeat-erp doctor` reports `4 PASS, 0 FAIL, 0 WARN, 1 INFO`. | Task E execution |
 # 21 — Phase 7a Sprint 0 Closure: InfraBeat Console MVP Foundations
 
 **Status:** ⏳ IN PROGRESS (Sprint 0 of Phase 7a — InfraBeat Console MVP).
@@ -62,7 +64,7 @@ All findings empirically verified during Task (A) recon. These constitute the **
 |---|---|---|---|---|
 | F1 | `gh` CLI device-flow auth is NOT operational on this laptop. Phase 6E.7 closure claim that it works is empirically false (PR #31 had to use browser fallback). | Kickoff prompt + `20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md` §6E.7 | P0 | yes — `gh auth status` exit code |
 | F2 | Keyring username convention is `<vm>-<purpose>-password` suffix (verified via `cmdkey /list` ground truth), NOT `<vm>-<purpose>` as `04_VM_INVENTORY.md` claims. Affects all 9 expected credential rows. | `04_VM_INVENTORY.md` Phase 6E.1.5 lines | P0 | yes — credential lookup by exact canonical name |
-| F3 | Only 5 of claimed "9 VM passwords" present in laptop keyring `infrabeat-vm-creds`: `staging-ssh-password`, `staging-mariadb-root`, `production-mariadb-root`, `dev-admin-password`, plus one anomalous `infrabeat-vm-creds/production-admin-password`. **MISSING:** `dev-ssh-password`, `production-ssh-password`, `staging-admin-password`, `dev-mariadb-root`, `production-admin-password` (under standard naming). | `04_VM_INVENTORY.md` Phase 6E.1.5 + kickoff prompt | **P0** | yes — enumerate all 9 expected credentials by name and report missing |
+| F3 | **RETRACTED (Task D doctor run confirms all 9 present; earlier cmdkey output was display-truncated):** Only 5 of claimed "9 VM passwords" present in laptop keyring `infrabeat-vm-creds`: `staging-ssh-password`, `staging-mariadb-root`, `production-mariadb-root`, `dev-admin-password`, plus one anomalous `infrabeat-vm-creds/production-admin-password`. **MISSING:** `dev-ssh-password`, `production-ssh-password`, `staging-admin-password`, `dev-mariadb-root`, `production-admin-password` (under standard naming). | `04_VM_INVENTORY.md` Phase 6E.1.5 + kickoff prompt | **P0** | yes — enumerate all 9 expected credentials by name and report missing |
 | F4 | `/home/erpadmin/custom_erp/infra/` directory does not exist on staging VM. Kickoff Task A description references a phantom path. | Phase 7 session kickoff prompt | P0 | n/a — H3 resolution makes this moot |
 | F5 | Six (!) stray `custom_erp` clone paths on staging VM: `~/frappe-bench/custom_erp` (suspicious top-level, NOT under `apps/`), `~/frappe-bench/apps/custom_erp` (canonical), `~/frappe-bench/apps/custom_erp/custom_erp` (Frappe v15 module folder — expected), `~/sync-staging/custom_erp`, `~/sync-staging/custom_erp/custom_erp`, `~/sync-staging/custom_erp/custom_erp/custom_erp`. The bench-root clone and the sync-staging tree warrant investigation. | Discovered in Task A survey | P1 | optional — disk-hygiene check |
 | F6 | Orphan `claude_doctype.py` + `claude_doctype.py.backup` at top of `apps/custom_erp/` on staging (provenance unclear, predates Sprint 0). Not present in repo `dev` branch. | Discovered in Task A survey | P1 | n/a |
@@ -81,7 +83,12 @@ All findings empirically verified during Task (A) recon. These constitute the **
 ### (B) Source layout refactor for B1 — ⏳ TODO
 ### (C) `infrabeat` console-script entry point + stub `tui.py` — ⏳ TODO
 ### (D) `infrabeat doctor` subcommand — ⏳ TODO
-### (E) gh CLI device-flow auth repair — ⏳ TODO
+### (E) gh CLI device-flow auth repair ✅ COMPLETE (2026-05-11)
+- Phase 6E.7 closure claimed device-flow auth was operational; empirically false (PR #31 used browser fallback, F1)
+- Resolution: `gh auth login --hostname github.com --web --git-protocol https` (browser-based OAuth)
+- Token stored in OS keyring (`gh auth status` reports `Logged in ... (keyring)`)
+- Verified: `infrabeat-erp doctor` post-auth reports `4 PASS, 0 FAIL, 0 WARN, 1 INFO`
+- Long-term plan (H4): replace gh CLI with httpx + PAT-in-keyring for PR/issue ops in Sprint 1+
 ### (F) CI extension for new package layout — ⏳ TODO
 ### (G) `.git_commit_msg.tmp` to `.gitignore` — ⏳ TODO
 
