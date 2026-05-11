@@ -1,22 +1,24 @@
-# PROJECT_FACTS — InfraBeat Portal Enterprise Center
+﻿# PROJECT_FACTS — InfraBeat Portal Enterprise Center
 
 > **CRITICAL:** Every code generation, runbook step, deployment plan, or architectural decision Claude produces must respect these facts EXACTLY. Case-sensitivity matters. VM-specific details matter. These are environment truths that don't change between sessions.
 
-> **Last reconciled 2026-05-10 (Phase 6E closure).** Three-VM architecture authoritative. Production VM (`10.1.0.186`) status flipped from "not provisioned" to "operational" per `15_PHASE_5_CLOSURE.md` §10. Dev and Staging FAC empirically at `2.0.0` (verified live this session); Production claimed `2.4.1` per Phase 5, pending re-verification in 6C.4. Phase 6D GitHub Actions pytest CI gate sealed at `dev` tip `98255b0`. Current `dev` tip: **`<6E_CLOSURE_MERGE_SHA>`** (Phase 6E closure docs PR; Phase 6E enforcement track sealed at `38047c6`). See `04_VM_INVENTORY.md` for per-VM operational detail; this file is the project-wide canonical truth. Document change log at end.
+> **Last reconciled 2026-05-10 (Phase 6E FULLY SEALED — both enforcement and debt-retirement tracks).** Phase 6E added composed protections across the platform: squash-only merge enforcement (Phase 6E.0), plaintext credential sanitization across 7 files (PR #21), three-VM credential rotation to 24-char keyring-backed values (Phase 6E.1.5), laptop OS keyring populated with 9 keys across 3 services (Phase 6E.1.5b), repo flipped public (Phase 6E.2), branch ruleset Active with 6 required CI checks + 5 protective rules (Phase 6E.3), dynamic OIDC endpoint discovery (PR #24), PR template universalized (PR #25), audit-log migration to user-home (PR #26), dedicated master-key keyring service (PR #27), OAuth token auto-refresh (PR #28), and a custom `infrabeat-erp-query` Claude Code skill (PR #29). Pytest baseline grew 70-75 monotonically across the track. **Plaintext credentials in repo: ZERO. Plaintext credentials usable against any VM: ZERO.** Current `dev` tip: **`982c0ba`** (PR #30 — Phase 6E.4+ debt-retirement closure docs merge). See `04_VM_INVENTORY.md` for per-VM operational detail, `18_PHASE_6D_CLOSURE.md` for CI gate inventory, `19_PHASE_6E_CLOSURE.md` for enforcement-track inventory + lessons L53-L65, and `20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md` for debt-retirement-track inventory + lessons L66-L68.
 
 ---
 
-## 🖥️ Infrastructure — Three-VM Architecture
+## Infrastructure - Three-VM Architecture
 
 InfraBeat operates **three** environment VMs, all on subnet `10.1.0.0/24`. Each has different paths, users, sites, and risk profiles. Cross-VM mistakes are the #1 cause of failed deploys.
 
 | Environment | IP | Role | Status | FAC version |
 |---|---|---|---|---|
-| 🟢 Dev (ERP0) | `10.1.0.184` | Daily development, hot-reload | ✅ OPERATIONAL | `2.0.0` (verified 2026-05-09) |
-| 🟡 Staging (ERP2) | `10.1.0.185` | UAT, pre-production validation | ✅ OPERATIONAL (Stage 1A closed; Phase 6C verified) | `2.0.0` (verified 2026-05-09 — parity with dev) |
-| 🔴 Production (ERP1) | `10.1.0.186` | Live business-critical | ✅ OPERATIONAL (Phase 5 verified; pending Phase 6C.4 re-verification) | `2.4.1` (per Phase 5 §10; **may be stale**, see FAC section) |
+| Dev (ERP0) | `10.1.0.184` | Daily development, hot-reload | OPERATIONAL | `2.0.0` (re-verified Phase 6E.4 close 2026-05-10) |
+| Staging (ERP2) | `10.1.0.185` | UAT, pre-production validation | OPERATIONAL (Stage 1A closed; Phase 6C.4 verified 2026-05-09) | `2.0.0` (verified 2026-05-09) |
+| Production (ERP1) | `10.1.0.186` | Live business-critical | OPERATIONAL (Phase 5 verified, Phase 6C.4 re-verified 2026-05-09) | **`2.0.0`** (empirically verified 2026-05-09) |
 
-**For per-VM detail (SSH users, bench paths, site names, branch mapping, FAC State, safety rules) see `04_VM_INVENTORY.md` — that file is canonical.** This table is the project-wide summary only.
+**Three-VM byte-equivalent catalog confirmed at Phase 6C close.** The 17-tool catalog is identical across dev, staging, and production. No drift. **Phase 6E architecture validated empirically on dev VM only (Phase 6E.4 close smoke); cross-VM smoke on staging and production deferred to Phase 7+ as outstanding debt.**
+
+**For per-VM detail see `04_VM_INVENTORY.md`.** This table is the project-wide summary only.
 
 ### Common to all three VMs
 
@@ -25,27 +27,29 @@ InfraBeat operates **three** environment VMs, all on subnet `10.1.0.0/24`. Each 
 | OS | Ubuntu 22.04 LTS | (Dev confirmed `22.04.5`; staging/prod baseline same) |
 | ERPNext | v15 | |
 | Frappe Framework | v15 | |
-| Python | 3.10 | Inside each VM's `frappe-bench/env/` |
+| Python | 3.10 | Inside each VMs `frappe-bench/env/` |
 | Node.js | 18.x | Required for asset builds |
 | Database | MariaDB 10.6+ | Localhost on each VM |
 | Redis (cache) | port 13000 | Frappe-managed; system `redis-server` MUST be masked (Stage 1A Gotcha #3) |
 | Redis (queue) | port 11000 | |
-| Web | port 80 (Nginx) → 8000 (Gunicorn) | Production mode (dev runs `bench start` instead) |
+| Web | port 80 (Nginx) - 8000 (Gunicorn) | Production mode (dev runs `bench start` instead) |
 | SocketIO | port 9000 | Real-time updates |
-| Network | `10.1.0.0/24` (VMs) ↔ `10.1.1.0/24` (laptop) via inter-subnet routing | VPN required for laptop access |
+| Network | `10.1.0.0/24` (VMs) - `10.1.1.0/24` (laptop) via inter-subnet routing | VPN required for laptop access; transient ConnectTimeouts at the router are documented (lesson L48) |
 
 ---
 
-## 🏢 Organization Identity
+## Organization Identity
 
 | Item | Value |
 |---|---|
 | Company | InfraBeat |
 | GitHub Org/User | `PrasadInfraBeat` |
-| Primary repo | `github.com/PrasadInfraBeat/custom_erp` (PRIVATE) |
-| Default branch | `dev` (NOT `main` — `main` was deleted per `05_GITHUB_WORKFLOW.md` v2) |
+| Primary repo | `github.com/PrasadInfraBeat/custom_erp` (**PUBLIC** as of Phase 6E.2) |
+| Default branch | `dev` (NOT `main` - `main` was deleted per `05_GITHUB_WORKFLOW.md` v2) |
 | Three branches only | `dev`, `staging`, `production` |
-| Current `dev` tip | `5184710` (Phase 6C.3 audit log merge, PR #13, 2026-05-09) |
+| Branch ruleset | **Active** (Phase 6E.3) - "Protected branches (dev/staging/production)" with 6 required CI checks + 5 protective rules (Restrict deletions, Require linear history, Require PR before merging, Require status checks to pass, Block force pushes) |
+| Merge convention | **Squash-only enforced at repo level** (Phase 6E.0) - `Allow merge commits` and `Allow rebase merging` disabled; default squash commit message = "Pull request title and description"; head branches auto-deleted on merge |
+| **Current `dev` tip** | **`982c0ba`** (PR #30 - Phase 6E.4+ debt-retirement closure docs merge) |
 | Custom App Name | `custom_erp` |
 | Module Name (case-sensitive!) | `Custom Erp` |
 | Default Country | India |
@@ -55,22 +59,22 @@ InfraBeat operates **three** environment VMs, all on subnet `10.1.0.0/24`. Each 
 
 ---
 
-## 👥 System Users (use the right one for the right operation)
+## System Users (use the right one for the right operation)
 
 | User | Type | Use for |
 |---|---|---|
-| `erpadmin` | sudo / SSH login | Service management on all VMs (`sudo supervisorctl`), system installs (`apt install`), nginx config. **SSH login user on all three VMs.** |
+| `erpadmin` | sudo / SSH login | Service management on all VMs (`sudo supervisorctl`), system installs (`apt install`), nginx config. **SSH login user on all three VMs.** SSH password rotated Phase 6E.1.5 to 24-char keyring-backed value (`infrabeat-vm-creds/<vm>-ssh`). |
 | `frappe` | application user (Dev VM only) | Bench commands, git operations, DocType operations on **Dev VM only** (path `/home/frappe/frappe-bench/`) |
 | `erpadmin` (as bench user) | application user (Staging + Prod) | Bench commands, git operations on **Staging and Production** (path `/home/erpadmin/frappe-bench/`) |
-| `Administrator` | ERPNext super admin (in-app) | Full access in ERPNext UI; password stored per-VM in keyring service `infrabeat-vm-creds` (see `04_VM_INVENTORY.md` §VM Credential Setup). Rotated post-Phase 6E.1.5 to invalidate any historical exposure. |
+| `Administrator` | ERPNext super admin (in-app) | Full access in ERPNext UI. Password rotated Phase 6E.1.5 to 24-char keyring-backed value (`infrabeat-vm-creds/<vm>-admin`). |
 
-**Switch users on Dev VM:** `sudo su - frappe` (real hyphen, NOT em-dash — paste-mangling has caused this to fail historically)
+**Switch users on Dev VM:** `sudo su - frappe` (real hyphen, NOT em-dash - paste-mangling has caused this to fail historically)
 
-⚠ **The bench user differs across VMs.** Dev = `frappe`. Staging + Prod = `erpadmin`. Don't conflate.
+**The bench user differs across VMs.** Dev = `frappe`. Staging + Prod = `erpadmin`. Dont conflate.
 
 ---
 
-## 📁 Critical Paths (per-VM bench root)
+## Critical Paths (per-VM bench root)
 
 | VM | Bench root |
 |---|---|
@@ -78,215 +82,117 @@ InfraBeat operates **three** environment VMs, all on subnet `10.1.0.0/24`. Each 
 | Staging (.185) | `/home/erpadmin/frappe-bench/` |
 | Production (.186) | `/home/erpadmin/frappe-bench/` |
 
-### Dev VM bench layout (representative — staging/prod mirror this under `erpadmin`)
-```
-~/frappe-bench/
-├── apps/
-│   ├── frappe/                        # Framework (don't touch)
-│   ├── erpnext/                       # ERP modules (don't touch)
-│   ├── frappe_assistant_core/         # FAC v2.0.0 on dev+staging / claimed v2.4.1 on prod (don't touch)
-│   └── custom_erp/                    # OUR CUSTOM APP
-│       ├── .git/
-│       ├── .github/                   # CI workflows
-│       ├── modules.txt                # ("Custom Erp" — case-sensitive)
-│       ├── hooks.py
-│       └── custom_erp/                # Module folder (NOTE: nested)
-│           ├── __init__.py            # CRITICAL: must exist
-│           ├── doctype/
-│           │   ├── __init__.py        # CRITICAL: must exist
-│           │   └── <doctype_name>/
-│           │       ├── __init__.py    # CRITICAL: must exist
-│           │       ├── <doctype>.json
-│           │       ├── <doctype>.py
-│           │       ├── <doctype>.js
-│           │       └── test_<doctype>.py
-│           └── pyproject.toml
-└── sites/<site_name>/                 # erp.local | erp.staging | erp.production
-```
-
 ---
 
-## 🏷️ Module Name — Exact Casing Required
+## Module Name - Exact Casing Required
 
 The ONLY correct module name is **`Custom Erp`**.
 
-- ❌ `Custom ERP` — WRONG (uppercase ERP)
-- ❌ `custom_erp` — WRONG (lowercase, no space)
-- ❌ `Custom_Erp` — WRONG (underscore not space)
-- ✅ `Custom Erp` — CORRECT (capital C, capital E, lowercase rp, single space)
+- `Custom ERP` - WRONG (uppercase ERP)
+- `custom_erp` - WRONG (lowercase, no space)
+- `Custom_Erp` - WRONG (underscore not space)
+- `Custom Erp` - CORRECT (capital C, capital E, lowercase rp, single space)
 
 Must match exactly in **three places**:
 1. `apps/custom_erp/modules.txt` (file contents)
 2. Each `<doctype>.json` `module` field
-3. The `tabModule Def` row in MariaDB (`SELECT name, app_name FROM \`tabModule Def\` WHERE app_name='custom_erp';`)
+3. The `tabModule Def` row in MariaDB
 
-If any of the three drift, Frappe silently 404s the DocType — no error, just "Page not found." Stage 1A burned hours on this.
-
----
-
-## 📦 ERPNext Modules in Use
-
-1. **Accounting** — Journal Entry, Payment Entry, Invoice
-2. **Selling** — Customer, Quotation, Sales Order, Sales Invoice
-3. **Buying** — Supplier, Purchase Order, Purchase Receipt, Purchase Invoice
-4. **Stock/Inventory** — Item, Warehouse, Stock Entry, Batch, Serial No
-5. **HR** — Employee, Attendance, Leave, Payroll, Appraisal
-6. **Manufacturing** — BOM, Work Order, Production Plan
-7. **CRM** — Lead, Opportunity, Communication, Campaign
-8. **Projects** — Project, Task, Timesheet
-9. **Assets** — Asset, Asset Maintenance, Asset Repair
-10. **Quality** — Quality Inspection, Quality Procedure, Quality Goal
-11. **Support** — Issue, Service Level Agreement
-12. **Setup** — Company, Branch, Department, Designation
-13. **Website** — Web Page, Blog, Website Settings
-14. **Integrations** — Webhook, Connected App, OAuth Client (FAC consumes this)
-
-Custom DocTypes live under `custom_erp` module, not under any of the above. Examples: `Customer Visit` (Stage 1A verified working), and others in flight per Phase 5 carryover (Vendor Invoice, Ping Check, Customer Feedback).
+If any of the three drift, Frappe silently 404s the DocType - no error, just "Page not found." Stage 1A burned hours on this.
 
 ---
 
-## 🤖 Frappe Assistant Core (FAC) — AI Integration Layer
+## Frappe Assistant Core (FAC) - Live State
 
-FAC is the MCP-speaking server installed inside Frappe on each VM. It's how the laptop CLI (`infrabeat-erp`) and Claude Code talk to ERPNext.
+FAC is the MCP-speaking server installed inside Frappe on each VM. **Phase 6C.4 empirically confirmed all 3 VMs at perfect parity. Phase 6E.4 close re-confirmed dev VM only; cross-VM re-validation deferred to Phase 7+.**
 
 | Aspect | Value |
 |---|---|
-| Tool count (live, dev + staging) | 17 (byte-equivalent catalog) |
-| MCP protocol (Dev + Staging) | `2025-06-18` |
-| MCP endpoint path | `/api/method/frappe_assistant_core.api.fac_endpoint.handle_mcp` (post-PR #11 hotfix; was previously `/assistant/mcp` — wrong) |
+| FAC version (all 3 VMs) | **`2.0.0`** (verified 2026-05-09; dev re-verified 2026-05-10) |
+| Tool count (all 3 VMs) | **17** (byte-equivalent catalog) |
+| MCP protocol (all 3 VMs) | **`2025-06-18`** |
+| MCP endpoint path | `/api/method/frappe_assistant_core.api.fac_endpoint.handle_mcp` (post-PR #11 hotfix); **now read dynamically from OIDC `mcp_endpoint` per Phase 6E.4 (PR #24)** - hardcoded constant retained as fallback with `DeprecationWarning` |
 | OAuth flow | RFC 7591 dynamic registration + RFC 7636 PKCE S256 + browser authcode |
-| OIDC discovery | `<base_url>/.well-known/openid-configuration` returns `mcp_endpoint` correctly |
-| Token TTL | 3600s — no auto-refresh in CLI today; re-`login` required after expiry |
-| Audit log | ✅ Active per Phase 6C.3 (PR #13, `5184710`) — every CLI invocation captures 9 fields to `<cwd>/.audit/<YYYY-MM-DD>.jsonl` |
-| ⚠ Version drift | Dev = Staging = `2.0.0` (verified). Production claimed `2.4.1` per Phase 5, but Phase 6B established that `2.4.x` was stale on dev — same staleness may apply to prod. Phase 6C.4 will empirically resolve. |
+| OIDC discovery | `<base_url>/.well-known/openid-configuration` returns `mcp_endpoint` correctly; **consumed at runtime per Phase 6E.4** |
+| Token TTL | 3600s - **auto-refresh via `TokenRefreshAuth(httpx.Auth)` per Phase 6E.9 (PR #28)**; re-`login` only required when refresh-token also expired (rare) |
+| Audit log | Active per Phase 6C.3 (PR #13, `5184710`); **migrated to user-home `~/.infrabeat-erp/audit/<YYYY-MM-DD>.jsonl` per Phase 6E.6 (PR #26)**; legacy `<cwd>/.audit/` paths still readable via fallback chain |
+| Production guard | Active per Phase 6C.2 (PR #14, `c45fc38`) - `--allow-production` flag required for any production-targeted command |
+| Keyring storage | Active per Phase 6C.1 (PR #16, `42b1d07`); **master key separated to dedicated `infrabeat-erp-master/master` service per Phase 6E.8 (PR #27)** with 5-step backward-compatible resolution + auto-migration |
+| Custom Claude Code skills | `infrabeat-smoke-test` + `infrabeat-erp-query` (Phase 6E.10, PR #29) - Claude Code routes ERPNext data questions through CLI subcommands |
+| `gh` CLI device-flow auth | Completed Phase 6E.7 - `gh pr create` and `gh api repos/.../rulesets` both work without browser fallback |
 
-**17 canonical tools (verified against dev AND staging 2026-05-09):**
-`create_document` · `get_document` · `update_document` · `list_documents` · `delete_document` · `submit_document` · `search_documents` · `search_doctype` · `search_link` · `search` · `fetch` · `get_doctype_info` · `generate_report` · `report_list` · `report_requirements` · `run_workflow` · `get_pending_approvals`
+**17 canonical tools (verified against ALL 3 VMs in Phase 6C.4):**
+`create_document` - `get_document` - `update_document` - `list_documents` - `delete_document` - `submit_document` - `search_documents` - `search_doctype` - `search_link` - `search` - `fetch` - `get_doctype_info` - `generate_report` - `report_list` - `report_requirements` - `run_workflow` - `get_pending_approvals`
 
-`probe_fac` is **no longer present** in v2.0.0 (was in earlier FAC versions, removed).
+`probe_fac` is **no longer present** in v2.0.0.
 
 ---
 
-## 🛡️ Security Defaults
+## Security Defaults
 
-- Always use **private** files for sensitive uploads (PII, contracts) — `private/files/` not `public/files/`
+- Always use **private** files for sensitive uploads (PII, contracts) - `private/files/` not `public/files/`
 - Always check permissions in custom Python methods (`@frappe.whitelist()` with explicit role checks)
-- Never log sensitive data (passwords, tokens, full credit card numbers, full SSN-equivalents)
+- Never log sensitive data (passwords, tokens, full credit card numbers)
 - Backups stored in `~/frappe-bench/sites/<site>/private/backups/`
-- API keys, GitHub PATs, FAC tokens **never** in code or git — currently on disk under `<cwd>/.secrets/<vm>.json` (CWD-relative, Phase 6C.1 will promote to OS keyring)
-- Production VM access from `infrabeat-erp` CLI is **gated** — Phase 6C.2 introduces `--allow-production` and `--confirm DEPLOY` flags. **Do not run `infrabeat-erp <cmd> production` until 6C.2 lands on `dev`.**
-- ✅ Phase 6C.3 introduces JSONL audit log at `<cwd>/.audit/<YYYY-MM-DD>.jsonl` capturing every CLI invocation (PR #13, merged at `5184710`). 9 fields: `timestamp_utc`, `user`, `cli_version`, `pid`, `subcommand`, `vm`, `args`, `exit_code`, `duration_ms`. Forensic-grade observability for every command run.
-- Three-branch protection (per `05_GITHUB_WORKFLOW.md` v2): `dev` (default, feature PRs), `staging` (PRs from `dev` only), `production` (PRs from `staging` only + backup gate)
+- API keys, GitHub PATs, FAC tokens **never** in code or git - stored across **three dedicated OS keyring services** on laptop:
+  - `infrabeat-erp` - OAuth tokens (one entry per VM: `dev`, `staging`, `production`)
+  - `infrabeat-erp-master` - Fernet master key for encrypted-JSON fallback (Phase 6E.8 separation, PR #27)
+  - `infrabeat-vm-creds` - 9 VM passwords (3 VMs x {ssh, mariadb-root, admin}), all 24-char rotated values (Phase 6E.1.5)
+- **Plaintext credentials in repo: ZERO** as of Phase 6E.1 sanitization (PR #21 covered 7 files including legacy Phase 5 helper scripts, MD docs, and audit log examples).
+- **Plaintext credentials usable against any VM: ZERO** as of Phase 6E.1.5 rotation. Old `Erpinfra@123` (visible in pre-rotation git history) no longer authorizes anything anywhere.
+- Production VM access via `infrabeat-erp` CLI is **gated** per Phase 6C.2 (PR #14, `c45fc38`): `--allow-production` global flag required (refusal fires in <20ms, before any network I/O).
+- Phase 6C.3 (PR #13, `5184710`) provides JSONL audit log; **Phase 6E.6 (PR #26) migrated to user-home** at `~/.infrabeat-erp/audit/<YYYY-MM-DD>.jsonl` capturing every CLI invocation (9 fields).
+- Repo `.gitignore` (PR #15, `fc0e7ce`) excludes operational helper scripts at repo root: `/apply_*.py`, `/fix_*.py`, `/phase*_prompt.md`.
+- **Repo flipped public** Phase 6E.2 - eliminates GitHub free-tier private-repo restriction on required status checks. Long-term-optimized choice ($0 recurring cost; ERPNext community norm).
+- **Branch ruleset Active** Phase 6E.3 - `dev`/`staging`/`production` enforce 6 required CI checks plus 5 protective rules. PR #21 was the first PR ever subject to real enforcement.
+- **Squash-only merge** Phase 6E.0 - repo settings disabled merge commits and rebase merging; squash is the only merge type available in PR UI.
+- **Token auto-refresh** Phase 6E.9 (PR #28) - `TokenRefreshAuth(httpx.Auth)` transparently handles 401 - `oauth.refresh` - replay with new bearer.
 
 ---
 
-## 🚦 Production Mode Checklist (per VM)
-
-Each VM in production mode (Staging + Production VMs always; Dev VM if not running `bench start`) must have these supervisor processes RUNNING. Verify via `sudo supervisorctl status`:
-
-```
-frappe-bench-redis:frappe-bench-redis-cache              RUNNING
-frappe-bench-redis:frappe-bench-redis-queue              RUNNING
-frappe-bench-web:frappe-bench-frappe-web                 RUNNING
-frappe-bench-web:frappe-bench-node-socketio             RUNNING
-frappe-bench-workers:frappe-bench-frappe-schedule        RUNNING
-frappe-bench-workers:frappe-bench-frappe-default-worker-0 RUNNING
-frappe-bench-workers:frappe-bench-frappe-short-worker-0   RUNNING
-frappe-bench-workers:frappe-bench-frappe-long-worker-0    RUNNING
-```
-
-If anything is `BACKOFF` or `STOPPED`, see `00_2_GOTCHAS.md` (especially #3 Redis port conflict and #4 Stale Gunicorn on port 8000) or `OPERATIONS_GUIDE.md`.
-
-**Dev VM** typically runs `bench start` (single-process dev mode) instead of supervisor. If switching dev to production mode, kill any stray gunicorn on port 8000 first (`sudo fuser -k 8000/tcp`).
-
----
-
-## 🔄 Standard Operating Cadences
-
-| Activity | Frequency | Owner |
-|---|---|---|
-| Backups (per VM) | Daily auto + before every deploy | Automated (Phase 7+ `infrabeat-backup` skill); manual `bench backup --with-files` until then |
-| Log review | Weekly | Tech lead |
-| Security patches | Monthly | erpadmin |
-| ERPNext upgrades | Quarterly (test in staging first) | Tech lead |
-| Staging refresh from prod | Monthly | erpadmin |
-| API key / PAT rotation | Every 90 days | Tech lead |
-| FAC version reconciliation (dev/staging vs prod drift) | Phase 6E target | Tech lead |
-| Audit log retention check | Monthly | Manual until Phase 6E adds `audit prune` subcommand |
-
----
-
-## 📋 Authoritative Project State Summary (as of 2026-05-09)
+## Authoritative Project State Summary (as of 2026-05-10 - Phase 6E FULLY SEALED, both tracks)
 
 **Phase status:**
-- Phase 5 (stdlib script baseline): ✅ Sealed (`15_PHASE_5_CLOSURE.md`)
-- Phase 6A–6B (typed Python CLI): ✅ Sealed (`16_PHASE_6B_CLOSURE.md`)
-- Phase 6C.3 (JSONL audit log): ✅ **Merged on `dev` at `5184710` (PR #13, 2026-05-09)**
-- Phase 6C.2 (production guards: `--allow-production`, `--confirm DEPLOY`): 🟡 Next sub-phase
-- Phase 6C.1 (keyring promotion): ⏳ Planned after 6C.2
-- Phase 6C.4 (closure smoke against staging + prod FAC re-verification): ⏳ Planned after 6C.1
-- Phase 6D (CI integration via GitHub Actions for pytest): ✅ **SEALED** (`docs/closures/18_PHASE_6D_CLOSURE.md`)
-- Phase 6E enforcement track (squash + sanitization + rotation + keyring + public + branch protection): ✅ **SEALED** (`docs/closures/19_PHASE_6E_CLOSURE.md`)
-  - 6E.0 squash-only enforced: ✅ Repo settings
-  - 6E.1 docs sanitized: ✅ PR #21 `38047c6`
-  - 6E.1.5 VM credentials rotated: ✅ Dev/Staging/Production
-  - 6E.1.5b Laptop keyring populated: ✅ 9 keys verified
-  - 6E.2 repo public: ✅
-  - 6E.3 branch ruleset Active: ✅ 6 required checks across 3 branches
-- Phase 6E.4+ debt retirement (L40, L49, L50, master key, auto-refresh, skill, gh device-flow): ✅ **FULLY SEALED** (`docs/closures/20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md`)
-  - 6E.4 L40 mcp.py dynamic OIDC endpoint discovery: ✅ PR #24 `14bc302`
-  - 6E.5 L49 PR template multi-PR-type fit: ✅ PR #25 `193b43d`
-  - 6E.6 L50 audit log migrated to user-home: ✅ PR #26 `4c81bc7`
-  - 6E.7 gh CLI device-flow auth: ✅ Operational (no PR)
-  - 6E.8 master key keyring service rename: ✅ PR #27 `909f4d5`
-  - 6E.9 token auto-refresh on 401: ✅ PR #28 `1a16671`
-  - 6E.10 Claude Code skill `infrabeat-erp-query`: ✅ PR #29 `0398e50`
-- Phase 6E (BOTH tracks): ✅ **FULLY SEALED 2026-05-10**
-- Phase 7 (InfraBeat Console TUI): ⏳ Planned (per `12_INFRABEAT_CONSOLE_SPEC.md`)
+- Phase 5 (stdlib script baseline): Sealed (`15_PHASE_5_CLOSURE.md`)
+- Phase 6A-6B (typed Python CLI): Sealed (`16_PHASE_6B_CLOSURE.md`)
+- Phase 6C (defense-in-depth: audit + guards + keyring): Sealed (`17_PHASE_6C_CLOSURE.md`)
+- Phase 6D (CI integration via GitHub Actions for pytest): **SEALED** (`18_PHASE_6D_CLOSURE.md`)
+  - PR #19 `98255b0` - `.github/workflows/python-tests.yml` + `[test]` extras + 70-pytest CI on every PR to `dev`/`staging`/`production`
+  - Coverage gate at 70%
+- Phase 6E (enforcement track + debt retirement track): **FULLY SEALED** (`19_PHASE_6E_CLOSURE.md`, `20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md`)
+  - **Enforcement track (PRs #21, #22):** 6E.0 squash-only; 6E.1 sanitization (7 files); 6E.1.5 VM credential rotation (9 unique 24-char passwords); 6E.1.5b laptop keyring populated; 6E.2 repo flipped public; 6E.3 branch ruleset Active
+  - **Debt retirement track (PRs #24-#29 + closure doc #30):** 6E.4 dynamic OIDC (PR #24, L40 closed); 6E.5 PR template (PR #25, L49 closed); 6E.6 audit user-home (PR #26, L50 closed); 6E.7 gh CLI auth; 6E.8 master key dedicated (PR #27); 6E.9 token auto-refresh (PR #28); 6E.10 custom skill (PR #29)
+- Phase 7 (InfraBeat Console TUI per `12_INFRABEAT_CONSOLE_SPEC.md` + `12.1_INFRABEAT_CONSOLE_SPEC_REVIEW.md`): **Active scope** - spec review identifies 5 BLOCKERS, 5 HIGH-priority, 4 MEDIUM-priority decisions. Phase 7a MVP = C0-C5 + C7-audit (~25h); Phase 7b follow-on = C6/C8/C9/C10/C11/C12 (~16h).
 
-**Working `infrabeat-erp` CLI subcommands** (all read-only; verified live on dev + staging; every invocation auto-audited):
-- `register <vm>` — RFC 7591 OAuth client registration
-- `login <vm>` — RFC 7636 PKCE auth code flow
-- `smoke <vm> [--json]` — MCP `initialize` + `tools/list`
-- `query <vm> <doctype> [--filter k=v]... [--limit N] [--json]` — list documents
-- `get <vm> <doctype> <name> [--json]` — fetch single document
-- `describe <vm> <doctype> [--json]` — show schema
-- `search <vm> <text> [--limit N] [--json]` — full-text search
+**Working `infrabeat-erp` CLI subcommands** (8 total - all auto-audited; production-targeted ops gated by `--allow-production`; secrets in OS keyring; token auto-refresh transparent):
+`register`, `login`, `smoke`, `query`, `get`, `describe`, `search`, `migrate-secrets`
 
-**Coming in remaining Phase 6C sub-phases:**
-- `--allow-production` global flag (6C.2)
-- `--confirm DEPLOY` interactive prompt (6C.2)
-- `migrate-secrets` — move `.secrets/<vm>.json` → OS keyring (6C.1)
+**Test posture:** **75 passing, 1 skipped**. Phase 6E grew baseline +5 monotonically (70-72-73-75). Zero test regressions across 11 PRs.
 
-**Test posture:** 52 tests collected, 51 passing, 1 skipped (POSIX-only `secrets_store` mode-bit test, correctly bypassed on Windows). Audit module added 5 tests in 6C.3; existing 46 unchanged. Live integration smoke per `16_PHASE_6B_CLOSURE.md` §11 + this session's verification of dev + staging.
+**Branch protection (Phase 6E.3 ruleset Active):** **6 required CI checks** on every PR to `dev`/`staging`/`production` plus 5 protective rules. **PR #21 was the first PR ever subject to real enforcement.**
 
-**Branch protection:** 5-check CI on every PR (block direct pushes, Python lint, JSON validate, secret scan, require approving review). The `Require approving review` check shows as "failing/pending" until the solo developer self-approves — that's the lifecycle, not a CI bug. PR #13 (6C.3 merge) all 5 checks green. Advisory CI pytest gate active on PRs to all three branches (Phase 6D, PR #19; not platform-enforced — see `docs/closures/18_PHASE_6D_CLOSURE.md` §7 for enforcement posture and Phase 6E path).
+**Custom Claude Code skills:** `infrabeat-smoke-test` + `infrabeat-erp-query` (Phase 6E.10).
 
-**Known debt:**
-- Test runs write audit records to `<repo-root>/.audit/<today>.jsonl` because existing CliRunner-based tests in `test_cli.py` don't `chdir` to `tmp_path`. Cosmetic only (`.gitignore` covers it; never committed). Phase 6E user-home migration of `.audit/` eliminates structurally.
-- `~/.ssh/github_pat` referenced in `05_GITHUB_WORKFLOW.md` does not exist on the laptop. Either create the file or update the doc. Phase 6C.1 keyring will be the right home.
-- `gh` CLI installed on laptop (v2.92.0) but device-flow auth not completed in this session — `gh pr create` blocked, browser fallback used for PR #13.
+**Outstanding debt (deferred to Phase 7+):**
+- Lint expansion (ruff or flake8 beyond current Python lint check)
+- mypy integration for typed modules
+- Legacy Phase 5 script audit (`probe_fac.py`, `register_client.py` - sanitized in 6E.1; deletion-vs-keep decision pending)
+- `audit-prune` subcommand
+- **Cross-VM smoke validation on staging + production** - Phase 6E architecture validated only on dev so far
+- `.git_commit_msg.tmp` `.gitignore` entry (L67 mitigation)
+- Token expiry pre-flight check
+- Concurrent-call refresh deduplication
 
 ---
 
-## 📜 Document Change Log
+## Document Change Log
 
 | Date | Change | Source of truth |
 |---|---|---|
-| 2026-05-09 | Reconciled during Phase 6C kickoff Step 4. Production VM status flipped from "NOT YET PROVISIONED" to "OPERATIONAL". | `15_PHASE_5_CLOSURE.md` §10 |
-| 2026-05-09 | Three-VM architecture made authoritative throughout (replaces any single-VM legacy phrasing). | `04_VM_INVENTORY.md` reconciled same day |
-| 2026-05-09 | FAC version table added (Dev `2.0.0`, Staging TBD pending Step 5, Prod `2.4.1` pending re-verification). | `infrabeat-erp smoke dev` live + Phase 5 §10 |
-| 2026-05-09 | Phase 6C kickoff Step 5: Staging FAC empirically verified at `2.0.0`/17 tools — byte-equivalent with dev. Updated infrastructure table from "TBD" to verified value. Reframed prod claim with stale-claim caveat. | `infrabeat-erp smoke staging` live output |
-| 2026-05-09 | Added 17-tool canonical catalog (`probe_fac` removed). | `infrabeat-erp smoke dev` + `infrabeat-erp smoke staging` |
-| 2026-05-09 | Added MCP endpoint path post-PR #11 hotfix. | `16_PHASE_6B_CLOSURE.md` §3, §8 Debt 1 |
-| 2026-05-09 | Added `infrabeat-erp` CLI subcommand inventory + Phase 6C upcoming additions. | `16_PHASE_6B_CLOSURE.md` §4, §9 |
-| 2026-05-09 | Added 5-check CI lifecycle clarification (the "approving review" check is solo-dev self-approval, not a CI bug). | Live PR #12 + PR #13 inspection 2026-05-09 |
-| 2026-05-09 | Network topology updated (laptop subnet `10.1.1.0/24` vs VMs `10.1.0.0/24` via inter-subnet routing). | Network probe 2026-05-09 |
-| 2026-05-09 | **Phase 6C.3 audit log merged on `dev` at `5184710` (PR #13).** Added FAC State audit-capture rows per VM. Updated security defaults bullet. Updated phase status. Added 9-field audit record schema. Test count 46→51. Documented test-pollution debt for Phase 6E. | PR #13 squash merge |
-| 2026-05-10 | **🟢 Phase 6D SEALED. Advisory CI pytest gate active (workflow runs but does not block merge — free private repo limitation). Phase 6E will path to real enforcement via repo-public + credentials sanitization.** Workflow `.github/workflows/python-tests.yml` runs on every PR to `dev`/`staging`/`production`. Coverage gate at 70%. Test count unchanged at 70 passed / 1 skipped. | PR #19 + `docs/closures/18_PHASE_6D_CLOSURE.md` + `docs/closures/18_PHASE_6D_CLOSURE.md §7` |
-| 2026-05-10 | **Phase 6E.1 SEALED.** Plaintext legacy admin password reference in System Users table sanitized to keyring placeholder. Authoritative credential setup documented in `04_VM_INVENTORY.md` §VM Credential Setup. | PR #<TBD> |
-| 2026-05-10 | **🔐 Phase 6E enforcement track SEALED.** Squash-only merge convention enforced (6E.0); plaintext credentials sanitized via PR #21 `38047c6` (6E.1); SSH/MariaDB/Admin passwords rotated on Dev/Staging/Production VMs (6E.1.5); 9-key OS keyring service `infrabeat-vm-creds` populated on laptop (6E.1.5b); repo flipped Private→Public (6E.2); branch ruleset "Protected branches (dev/staging/production)" Active with 6 required status checks + 5 protective rules (6E.3). Lessons L54-L65 captured in `19_PHASE_6E_CLOSURE.md`. CI is no longer advisory — Phase 6D's enforcement gap is now closed. | PR #<TBD> |
-| 2026-05-10 | **Phase 6E.10: registered new Claude Code skill `infrabeat-erp-query` at `.claude/skills/infrabeat-erp-query/SKILL.md`.** Teaches Claude WHEN to invoke the `infrabeat-erp` CLI for ERPNext data questions and HOW to format calls (smoke / query / get / describe / search) with VM aliases, `--allow-production` gate, `--json` discipline, and Phase 6E.9 auto-refresh failure handling. Read-only by construction. | PR #<TBD> |
-| 2026-05-10 | **🟢 Phase 6E FULLY SEALED (both tracks).** Enforcement track sealed at PR #21 `38047c6` + closure docs PR #22 (`19_PHASE_6E_CLOSURE.md`). Debt retirement track sealed across PRs #24-#29 retiring L40 / L49 / L50 / master-key separation / token auto-refresh / Claude Code skill, plus operational 6E.7 gh CLI device-flow auth (`20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md`). Pytest baseline grew 70 → 72 → 73 → 75 across the track; no test removed. New lessons L66/L67/L68 captured covering Claude Code `-p` mode mechanics. Phase 7 (InfraBeat Console TUI per `12_INFRABEAT_CONSOLE_SPEC.md`) is now the next major scope. | PR #<TBD> + `20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md` |
+| 2026-05-09 | Phase 6C close: production VM operational; FAC drift resolved; 3 protections composed. | `17_PHASE_6C_CLOSURE.md` |
+| 2026-05-10 | **Phase 6D SEALED (PR #19, `98255b0`).** GitHub Actions pytest CI gate added. | `18_PHASE_6D_CLOSURE.md` |
+| 2026-05-10 | **Phase 6E enforcement track SEALED (PRs #21, #22 at `38047c6`).** Squash-only + sanitization + rotation + public flip + ruleset. Lessons L53-L65. | `19_PHASE_6E_CLOSURE.md` |
+| 2026-05-10 | **Phase 6E debt retirement SEALED (PRs #24-#29 + closure doc #30 at `982c0ba`).** L40/L49/L50 closed; master-key dedicated; token auto-refresh; custom skill; gh CLI auth. Pytest 70-75. Lessons L66-L68. | `20_PHASE_6E_DEBT_RETIREMENT_CLOSURE.md` |
+| 2026-05-10 | **B5 reconciliation: this document and `04_VM_INVENTORY.md` reconciled through Phase 6E close.** Placeholder `<6E_CLOSURE_MERGE_SHA>` resolved to `982c0ba`; stale prod FAC claim (`2.4.1`) corrected to `2.0.0` parity; Phase 6E.4+ content added; outstanding debt list refreshed. | This PR; spec review `12.1_INFRABEAT_CONSOLE_SPEC_REVIEW.md` B5 |
 
 ---
