@@ -784,3 +784,15 @@ def migrate_secrets(
             click.echo(f"{target}: error: {exc}", err=True)
             sys.exit(1)
         click.echo(f"{target}: {status}")
+
+@main.command()
+@click.option("--verbose", "-v", is_flag=True, help="Show remediation hints for all checks")
+def doctor(verbose: bool) -> None:
+    """Run pre-flight checks for InfraBeat operational state.
+
+    Sprint 0 MVP: 5 checks (Python, keyring backend, VM credentials, gh CLI, audit dir).
+    Reports drift surfaced in docs/closures/21_PHASE_7A_SPRINT_0_CLOSURE.md.
+    """
+    from .application.doctor import main as _doctor_main
+    import sys as _sys
+    _sys.exit(_doctor_main(verbose=verbose))
