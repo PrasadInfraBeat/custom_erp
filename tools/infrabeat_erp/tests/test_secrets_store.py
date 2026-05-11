@@ -9,8 +9,8 @@ import keyring
 import keyring.errors
 import pytest
 
-from infrabeat_erp import secrets_store
-from infrabeat_erp.secrets_store import (
+from infrabeat_erp.infrastructure import secrets_store
+from infrabeat_erp.infrastructure.secrets_store import (
     SecretsNotFound,
     SecretsStoreError,
     load_secrets,

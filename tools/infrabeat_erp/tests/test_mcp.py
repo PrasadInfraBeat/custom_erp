@@ -6,8 +6,9 @@ import httpx
 import pytest
 import respx
 
-from infrabeat_erp import cli, mcp, secrets_store
-from infrabeat_erp.mcp import (
+from infrabeat_erp import cli
+from infrabeat_erp.infrastructure import mcp, secrets_store
+from infrabeat_erp.infrastructure.mcp import (
     MCP_ENDPOINT_PATH,
     MCPError,
     MCPProtocolError,
@@ -17,7 +18,7 @@ from infrabeat_erp.mcp import (
     initialize,
     list_tools,
 )
-from infrabeat_erp.oauth import clear_discovery_cache
+from infrabeat_erp.infrastructure.oauth import clear_discovery_cache
 
 BASE_URL = "http://erp.test"
 MCP_URL = BASE_URL + MCP_ENDPOINT_PATH

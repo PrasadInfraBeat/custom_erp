@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 import pytest
 from click.testing import CliRunner
 
-from infrabeat_erp import audit, cli
+from infrabeat_erp import cli
+from infrabeat_erp.infrastructure import audit
 
 
 def _today_filename() -> str:
@@ -21,7 +22,7 @@ def _redirect_audit_dir(
     """Redirect _get_audit_dir() to a per-test tmp_path to prevent CWD/user-home pollution."""
     audit_root = tmp_path / "audit"
     monkeypatch.setattr(
-        "infrabeat_erp.audit._get_audit_dir", lambda: audit_root
+        "infrabeat_erp.infrastructure.audit._get_audit_dir", lambda: audit_root
     )
     return audit_root
 

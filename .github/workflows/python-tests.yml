@@ -28,6 +28,12 @@ jobs:
       - name: Install package with test extras
         run: pip install -e "./tools/infrabeat_erp[test]"
 
+      - name: Smoke - infrabeat-erp --help (CLI entry post-refactor)
+        run: infrabeat-erp --help
+      - name: Smoke - infrabeat (TUI stub, Task C)
+        run: infrabeat
+      - name: Smoke - infrabeat-erp doctor --help (Task D subcommand)
+        run: infrabeat-erp doctor --help
       - name: Run pytest with coverage
         run: pytest tools/infrabeat_erp/tests/ --cov=infrabeat_erp --cov-report=html --cov-report=term --cov-fail-under=70
 

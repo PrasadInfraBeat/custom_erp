@@ -28,6 +28,8 @@ test = [
 
 [project.scripts]
 infrabeat-erp = "infrabeat_erp.cli:main"
+infrabeat = "infrabeat_erp.tui:main"
+
 
 [tool.setuptools.packages.find]
 where = ["src"]
