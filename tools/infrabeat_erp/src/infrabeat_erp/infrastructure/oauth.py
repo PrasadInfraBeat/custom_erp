@@ -25,7 +25,7 @@ import urllib.parse
 import webbrowser
 from dataclasses import dataclass
 
-from infrabeat_erp.http import make_client
+from infrabeat_erp.infrastructure.http import make_client
 
 DISCOVERY_PATH = "/.well-known/openid-configuration"
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8765/callback"

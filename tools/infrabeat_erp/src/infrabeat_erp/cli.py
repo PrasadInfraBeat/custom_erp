@@ -38,15 +38,15 @@ import json
 import sys
 from dataclasses import asdict
 
-from infrabeat_erp import config, http, mcp, oauth, secrets_store
-from infrabeat_erp.mcp import MCPError, MCPProtocolError
-from infrabeat_erp.oauth import (
+from infrabeat_erp.infrastructure import config, http, mcp, oauth, secrets_store
+from infrabeat_erp.infrastructure.mcp import MCPError, MCPProtocolError
+from infrabeat_erp.infrastructure.oauth import (
     ClientRegistration,
     LoginError,
     RefreshError,
     RegistrationError,
 )
-from infrabeat_erp.secrets_store import SecretsNotFound
+from infrabeat_erp.infrastructure.secrets_store import SecretsNotFound
 
 
 @main.command()
@@ -557,7 +557,7 @@ def search(
 
 import time as _audit_time
 
-from infrabeat_erp import audit as _audit
+from infrabeat_erp.infrastructure import audit as _audit
 
 _AUDIT_SUBCOMMANDS = frozenset(
     ["register", "login", "smoke", "query", "get", "describe", "search"]

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from infrabeat_erp.config import VMConfig, get_vm, load_config
-from infrabeat_erp.http import make_client
+from infrabeat_erp.infrastructure.config import VMConfig, get_vm, load_config
+from infrabeat_erp.infrastructure.http import make_client
 
 
 TOML_FIXTURE = """\

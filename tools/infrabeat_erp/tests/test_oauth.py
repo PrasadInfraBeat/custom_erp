@@ -11,7 +11,7 @@ import httpx
 import pytest
 import respx
 
-from infrabeat_erp.oauth import (
+from infrabeat_erp.infrastructure.oauth import (
     ClientRegistration,
     LoginError,
     RefreshError,

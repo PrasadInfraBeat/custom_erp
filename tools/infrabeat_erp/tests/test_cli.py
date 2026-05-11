@@ -7,11 +7,12 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
-from infrabeat_erp import cli, config, http, mcp, oauth, secrets_store
-from infrabeat_erp.config import VMConfig
-from infrabeat_erp.mcp import MCPProtocolError, ServerCapabilities, Tool
-from infrabeat_erp.oauth import ClientRegistration, Tokens
-from infrabeat_erp.secrets_store import SecretsNotFound
+from infrabeat_erp import cli
+from infrabeat_erp.infrastructure import config, http, mcp, oauth, secrets_store
+from infrabeat_erp.infrastructure.config import VMConfig
+from infrabeat_erp.infrastructure.mcp import MCPProtocolError, ServerCapabilities, Tool
+from infrabeat_erp.infrastructure.oauth import ClientRegistration, Tokens
+from infrabeat_erp.infrastructure.secrets_store import SecretsNotFound
 
 
 def _vm() -> VMConfig:
