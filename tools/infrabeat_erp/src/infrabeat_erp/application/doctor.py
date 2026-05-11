@@ -16,7 +16,11 @@ import sys
 from pathlib import Path
 from typing import NamedTuple
 
+import io
+import time
+
 import keyring
+import paramiko
 
 EXPECTED_VM_CREDENTIALS = [
     "dev-ssh-password",
@@ -34,6 +38,14 @@ EXPECTED_KEYRING_SERVICES = [
     "infrabeat-vm-creds",
     "infrabeat-erp",
     "infrabeat-erp-master",
+]
+
+INFRABEAT_SSH_KEY = Path.home() / ".ssh" / "infrabeat_ed25519"
+
+VMS = [
+    {"name": "dev", "host": "10.1.0.184", "user": "erpadmin"},
+    {"name": "staging", "host": "10.1.0.185", "user": "erpadmin"},
+    {"name": "production", "host": "10.1.0.186", "user": "erpadmin"},
 ]
 
 
@@ -160,6 +172,77 @@ CHECKS = [
 ]
 
 
+def check_vm_ssh() -> list[CheckResult]:
+    """Verify passwordless SSH to each VM using InfraBeat ed25519 key.
+
+    Returns one CheckResult per VM (3 total). PASS includes the hostname
+    returned by `hostname` over SSH plus round-trip duration. FAIL captures
+    exception type+message and points to bootstrap_ssh_keys.py for remediation.
+    """
+    if not INFRABEAT_SSH_KEY.exists():
+        return [
+            CheckResult(
+                name=f"vm-ssh-{vm['name']}",
+                status="FAIL",
+                detail=f"InfraBeat SSH key missing at {INFRABEAT_SSH_KEY}",
+                remediation="Run: python scripts/bootstrap_ssh_keys.py",
+            )
+            for vm in VMS
+        ]
+    try:
+        pkey = paramiko.Ed25519Key.from_private_key(
+            io.StringIO(INFRABEAT_SSH_KEY.read_text(encoding="utf-8"))
+        )
+    except Exception as e:
+        return [
+            CheckResult(
+                name=f"vm-ssh-{vm['name']}",
+                status="FAIL",
+                detail=f"Failed to load SSH key: {type(e).__name__}: {e}",
+                remediation="Verify ~/.ssh/infrabeat_ed25519 is valid ed25519",
+            )
+            for vm in VMS
+        ]
+    results: list[CheckResult] = []
+    for vm in VMS:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        t0 = time.time()
+        try:
+            client.connect(
+                hostname=vm["host"],
+                username=vm["user"],
+                pkey=pkey,
+                timeout=15,
+                banner_timeout=15,
+                auth_timeout=10,
+                allow_agent=False,
+                look_for_keys=False,
+            )
+            _, stdout, _ = client.exec_command("hostname", timeout=5)
+            hn = stdout.read().decode("utf-8", errors="replace").strip()
+            results.append(
+                CheckResult(
+                    name=f"vm-ssh-{vm['name']}",
+                    status="PASS",
+                    detail=f"{vm['user']}@{vm['host']} -> {hn} ({time.time()-t0:.2f}s)",
+                    remediation="",
+                )
+            )
+        except Exception as e:
+            results.append(
+                CheckResult(
+                    name=f"vm-ssh-{vm['name']}",
+                    status="FAIL",
+                    detail=f"{vm['host']}: {type(e).__name__}: {e} (after {time.time()-t0:.2f}s)",
+                    remediation="Verify reachability and re-run scripts/bootstrap_ssh_keys.py",
+                )
+            )
+        finally:
+            client.close()
+    return results
+
+
 def run_all() -> list[CheckResult]:
     results = []
     for fn in CHECKS:
@@ -174,6 +257,18 @@ def run_all() -> list[CheckResult]:
                     "internal bug; please report",
                 )
             )
+    # Sprint 1 Task 2: VM-side SSH reachability checks (returns list, so extend)
+    try:
+        results.extend(check_vm_ssh())
+    except Exception as exc:
+        results.append(
+            CheckResult(
+                "vm-ssh",
+                "FAIL",
+                f"check_vm_ssh raised {type(exc).__name__}: {exc}",
+                "internal bug; please report",
+            )
+        )
     return results
 
 
