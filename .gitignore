@@ -25,3 +25,6 @@ tools/infrabeat_erp/.secrets/
 /apply_*.py
 /fix_*.py
 /phase*_prompt.md
+
+# L67 mitigation (Phase 7a Sprint 0 Task G): gh CLI commit-message temp file
+.git_commit_msg.tmp
