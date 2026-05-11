@@ -1,8 +1,10 @@
 
 | 2026-05-11 | **Task E COMPLETE**: F1 resolved via `gh auth login --web` (browser OAuth, token in keyring). F3 retraction: doctor confirms all 9 VM creds present. `infrabeat-erp doctor` reports `4 PASS, 0 FAIL, 0 WARN, 1 INFO`. | Task E execution |
+
+| 2026-05-11 | **Sprint 0 SEALED**. All 7 tasks complete. Final state: 86 passed/1 skipped, `infrabeat-erp doctor` reports `4 PASS, 0 FAIL, 0 WARN, 1 INFO`. Ready for PR review + merge to `dev`. | Sprint 0 closure |
 # 21 — Phase 7a Sprint 0 Closure: InfraBeat Console MVP Foundations
 
-**Status:** ⏳ IN PROGRESS (Sprint 0 of Phase 7a — InfraBeat Console MVP).
+**Status:** ✅ SEALED (2026-05-11) — all 7 tasks complete on `chore/phase7a-sprint0`.
 **Date opened:** 2026-05-11
 **Working branch:** `chore/phase7a-sprint0` (off `dev` tip `324573f` from PR #31).
 **PR target:** Single PR delivering Sprint 0 Tasks (A)-(G) per Phase 7 kickoff scope (~6h estimate).
@@ -14,7 +16,21 @@
 
 ## 1. Executive Summary
 
-*(Filled at Sprint 0 close.)*
+Sprint 0 is **SEALED**. All 7 tasks complete in 7 commits on `chore/phase7a-sprint0`:
+
+| Task | Outcome | Commit |
+|---|---|---|
+| A | H3 locked: shell-over-SSH wins over Ansible (zero playbook ecosystem on staging) | `ef1d391` |
+| B | B1 source layout migration: 6 modules into `infrastructure/`, 4 new layer packages | `c2f1ab8` |
+| C | `infrabeat` console-script + Sprint-0 TUI stub | `ab05a43` |
+| D | `infrabeat-erp doctor` subcommand with 5 pre-flight checks + 11 unit tests | `29b87df` |
+| E | F1 resolved: gh CLI auth via browser OAuth, token stored in OS keyring | `c3bd73b` |
+| F | CI extended with 3 smoke tests for new entry points + doctor | `22c8655` |
+| G | `.git_commit_msg.tmp` added to .gitignore (L67) | `5c09fdf` |
+
+**Test baseline:** 75 passed/1 skipped at Sprint open → **86 passed/1 skipped at Sprint close** (+11 new doctor tests). **Live doctor:** `4 PASS, 0 FAIL, 0 WARN, 1 INFO`.
+
+**Phase 7a Sprint 1 opens next:** SSH key-based auth bootstrap (eliminates password-paste friction surfaced in L72), replace gh CLI with httpx+PAT (H4 long-term plan), expand doctor with VM-side checks (SSH connectivity, FAC service status, sudoers, Python version probe per VM).
 
 Sprint 0 establishes the foundations for the InfraBeat Console TUI: resolves the H3 architectural decision (Ansible vs shell-over-SSH), refactors `tools/infrabeat_erp/` source layout to support both the existing CLI and the new TUI per B1, adds the `infrabeat` console-script entry point, builds the `infrabeat doctor` pre-flight check subcommand consuming the 7 P0/P1 findings discovered in Task A, repairs gh CLI device-flow auth (new debt from Phase 7 kickoff), extends CI for the new package layout, and adds `.git_commit_msg.tmp` to `.gitignore`.
 
@@ -89,8 +105,17 @@ All findings empirically verified during Task (A) recon. These constitute the **
 - Token stored in OS keyring (`gh auth status` reports `Logged in ... (keyring)`)
 - Verified: `infrabeat-erp doctor` post-auth reports `4 PASS, 0 FAIL, 0 WARN, 1 INFO`
 - Long-term plan (H4): replace gh CLI with httpx + PAT-in-keyring for PR/issue ops in Sprint 1+
-### (F) CI extension for new package layout — ⏳ TODO
-### (G) `.git_commit_msg.tmp` to `.gitignore` — ⏳ TODO
+### (F) CI extension for new package layout ✅ COMPLETE (2026-05-11)
+- Added 3 smoke-test steps to `.github/workflows/python-tests.yml`:
+  - `infrabeat-erp --help` (locks the CLI entry post-B1 refactor)
+  - `infrabeat` (locks the TUI stub entry from Task C)
+  - `infrabeat-erp doctor --help` (locks the doctor subcommand from Task D)
+- Smoke tests run between install and pytest in CI matrix
+- Doctor uses `--help` (not bare invocation) since CI env lacks keyring + gh auth
+- Helper: `scripts/task_f_ci_patch.py`
+### (G) `.git_commit_msg.tmp` to `.gitignore` ✅ COMPLETE (2026-05-11)
+- Added L67-mitigation entry to `.gitignore`
+- Prevents accidental commit of gh CLI's commit-message temp file (origin: Phase 6E debt)
 
 ---
 
