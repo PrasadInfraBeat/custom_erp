@@ -163,12 +163,30 @@ def check_audit_dir() -> CheckResult:
         )
 
 
+def check_github_pat() -> CheckResult:
+    """Check if a GitHub PAT is stored for promote subcommand (Sprint 3 Task 3.1)."""
+    try:
+        from ..infrastructure.pat_store import has_pat
+    except ImportError as exc:
+        return CheckResult("github-pat", "FAIL", f"pat_store import failed: {exc}")
+    if has_pat():
+        return CheckResult(
+            "github-pat", "PASS",
+            "PAT stored in keyring (service=infrabeat-erp-github)",
+        )
+    return CheckResult(
+        "github-pat", "INFO",
+        "PAT not stored (run 'infrabeat-erp github-pat set' before promote)",
+    )
+
+
 CHECKS = [
     check_python_version,
     check_keyring_backend,
     check_vm_credentials,
     check_gh_cli,
     check_audit_dir,
+    check_github_pat,
 ]
 
 
