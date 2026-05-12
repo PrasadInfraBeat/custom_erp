@@ -799,10 +799,11 @@ def doctor(verbose: bool) -> None:
 
 
 @main.command()
-@click.argument("vm_name", type=click.Choice(["staging", "production"]))
+@click.argument("vm_name", type=click.Choice(["dev", "staging", "production"]))
 @click.option("--output-dir", type=click.Path(), default=None, help="Local backup directory")
-def backup(vm_name: str, output_dir):
-    """Backup a VM's ERPNext site DB. Sprint 2 Task 1 MVP (staging/production only)."""
+@click.option("--no-files", is_flag=True, default=False, help="Skip files-tar and private-files-tar; database only.")
+def backup(vm_name: str, output_dir, no_files: bool):
+    """Backup a VM's ERPNext site (DB + files-tar + private-files-tar). Sprint 2 Task 1b (all 3 VMs)."""
     import asyncio as _asyncio
     import sys as _sys
     from pathlib import Path as _Path
@@ -824,10 +825,16 @@ def backup(vm_name: str, output_dir):
     adapter = SshAdapter(INFRABEAT_SSH_KEY)
     click.echo(f"Backing up {vm_name}... (may take a few minutes)")
     try:
-        result = _asyncio.run(do_backup(vm_name, adapter, out_dir))
+        result = _asyncio.run(do_backup(vm_name, adapter, out_dir, with_files=not no_files))
         size_mb = result.db_size_bytes / 1024 / 1024
         click.echo(f"OK: {result.local_db_path}")
         click.echo(f"     {size_mb:.1f} MB | sha256={result.db_sha256[:16]}... | {result.duration_seconds:.1f}s")
+        if result.local_files_path:
+            files_mb = (result.files_size_bytes or 0) / 1024 / 1024
+            click.echo(f"     files-tar: {result.local_files_path.name} ({files_mb:.1f} MB | sha256={(result.files_sha256 or '')[:16]}...)")
+        if result.local_private_files_path:
+            priv_mb = (result.private_files_size_bytes or 0) / 1024 / 1024
+            click.echo(f"     private-files-tar: {result.local_private_files_path.name} ({priv_mb:.1f} MB | sha256={(result.private_files_sha256 or '')[:16]}...)")
     except BackupError as e:
         click.echo(f"Backup FAILED: {e}", err=True)
         _sys.exit(1)
