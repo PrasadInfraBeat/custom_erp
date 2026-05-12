@@ -15,6 +15,14 @@ from ..application.vm_status_poller import poll_all
 from ..domain.vm_status import VmStatus
 from ..infrastructure.ssh_adapter import SshAdapter
 
+# === Sprint 4 Task 1a: TUI wiring for [B]ackup + [P]romote ===
+from textual.screen import ModalScreen
+from textual.widgets import RichLog, Button, Label
+from textual.containers import Vertical
+from textual import work
+from infrabeat_erp.application.backup import do_backup
+from infrabeat_erp.application.promote import do_promote
+
 
 class VmCard(Static):
     """Stateful card displaying live VM status. Refreshes on update_status()."""
@@ -83,6 +91,85 @@ class VmCard(Static):
         )
 
 
+class VmSelectModal(ModalScreen[Optional[str]]):
+    """Pick a VM from dev/staging/production. Dismisses with VM name or None."""
+
+    DEFAULT_CSS = """
+    VmSelectModal {
+        align: center middle;
+    }
+
+    VmSelectModal > Vertical {
+        width: 50;
+        height: auto;
+        border: thick $accent;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    VmSelectModal Button {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(self, action_label: str) -> None:
+        super().__init__()
+        self.action_label = action_label
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Label(f"Select VM for [bold]{self.action_label}[/bold]:")
+            yield Button("Dev (10.1.0.184)", id="dev", variant="primary")
+            yield Button("Staging (10.1.0.185)", id="staging", variant="primary")
+            yield Button("Production (10.1.0.186)", id="production", variant="error")
+            yield Button("Cancel", id="cancel", variant="default")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.dismiss(None)
+        else:
+            self.dismiss(event.button.id)
+
+
+class PromoteTargetModal(ModalScreen[Optional[str]]):
+    """Pick promotion target: staging or production."""
+
+    DEFAULT_CSS = """
+    PromoteTargetModal {
+        align: center middle;
+    }
+
+    PromoteTargetModal > Vertical {
+        width: 60;
+        height: auto;
+        border: thick $accent;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    PromoteTargetModal Button {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Label("Select promotion target:")
+            yield Label("  staging: dev -> staging")
+            yield Label("  production: staging -> production (LIVE)")
+            yield Button("Promote to STAGING", id="staging", variant="primary")
+            yield Button("Promote to PRODUCTION", id="production", variant="error")
+            yield Button("Cancel", id="cancel", variant="default")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.dismiss(None)
+        else:
+            self.dismiss(event.button.id)
+
+
 class InfraBeatApp(App):
     """InfraBeat Control Center: live 3-VM TUI."""
 
@@ -127,6 +214,7 @@ class InfraBeatApp(App):
                 card = VmCard(vm["name"], vm["host"])
                 self._cards[vm["name"]] = card
                 yield card
+        yield RichLog(id="output_log", wrap=True, max_lines=500, highlight=True, markup=True)
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -163,16 +251,58 @@ class InfraBeatApp(App):
         if self._ssh_adapter:
             self._ssh_adapter.shutdown()
 
-    # ====== Action handlers (placeholders, wired in later C-phases) ======
+    # ====== Sprint 4 Task 1a: Live workers for [B]ackup and [P]romote ======
+
+    @work(exclusive=True, group="ops")
+    async def _run_backup_worker(self, vm: str) -> None:
+        """Run do_backup(vm) async; stream to RichLog; notify on completion."""
+        log = self.query_one("#output_log", RichLog)
+        log.write(f"[bold cyan][backup][/bold cyan] starting on [bold]{vm}[/bold]...")
+        self.notify(f"Backup of {vm} started", severity="information", timeout=3)
+        try:
+            result = await do_backup(vm)
+            log.write("[bold green][backup][/bold green] complete:")
+            log.write(f"  result = {result}")
+            self.notify(f"Backup of {vm} OK", severity="information", timeout=5)
+        except Exception as e:
+            log.write(f"[bold red][backup ERROR][/bold red] {type(e).__name__}: {e}")
+            self.notify(f"Backup of {vm} failed: {e}", severity="error", timeout=10)
+
+    @work(exclusive=True, group="ops")
+    async def _run_promote_worker(self, target: str) -> None:
+        """Run do_promote(target) async; stream to RichLog; notify on completion."""
+        log = self.query_one("#output_log", RichLog)
+        log.write(f"[bold cyan][promote][/bold cyan] starting to [bold]{target}[/bold]...")
+        self.notify(f"Promote to {target} started", severity="information", timeout=3)
+        try:
+            result = await do_promote(target)
+            log.write("[bold green][promote][/bold green] complete:")
+            log.write(f"  result = {result}")
+            self.notify(f"Promote to {target} OK", severity="information", timeout=5)
+        except Exception as e:
+            log.write(f"[bold red][promote ERROR][/bold red] {type(e).__name__}: {e}")
+            self.notify(f"Promote to {target} failed: {e}", severity="error", timeout=10)
+
+    # ====== Action handlers (LIVE for [B][P], stubs for others) ======
 
     def action_promote(self) -> None:
-        self.notify("Promote dev->staging (Sprint 2 C3)", severity="information")
+        """[P] -> Target picker -> spawn promote worker."""
+        def _on_target_selected(target: Optional[str]) -> None:
+            if target:
+                self._run_promote_worker(target)
+
+        self.push_screen(PromoteTargetModal(), _on_target_selected)
 
     def action_deploy(self) -> None:
         self.notify("Deploy staging->prod (Sprint 2 C4)", severity="information")
 
     def action_backup(self) -> None:
-        self.notify("Backup (Sprint 2 C5)", severity="information")
+        """[B] -> VM picker -> spawn backup worker."""
+        def _on_vm_selected(vm: Optional[str]) -> None:
+            if vm:
+                self._run_backup_worker(vm)
+
+        self.push_screen(VmSelectModal("Backup"), _on_vm_selected)
 
     def action_smoke(self) -> None:
         self.notify("Smoke tests (Sprint 2 C5)", severity="information")
