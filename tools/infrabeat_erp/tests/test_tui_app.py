@@ -44,3 +44,93 @@ def test_run_entry_returns_int(monkeypatch):
 
     monkeypatch.setattr(tui_app, "InfraBeatApp", FakeApp)
     assert tui_app.run() == 0
+
+
+def test_action_backup_pushes_vm_modal(monkeypatch):
+    """action_backup pushes a VmSelectModal screen with a callback."""
+    from infrabeat_erp.presentation import tui_app
+
+    app = tui_app.InfraBeatApp()
+    pushed = []
+
+    def fake_push(screen, callback=None):
+        pushed.append((type(screen).__name__, callback))
+
+    monkeypatch.setattr(app, "push_screen", fake_push)
+    app.action_backup()
+
+    assert len(pushed) == 1
+    assert pushed[0][0] == "VmSelectModal"
+    assert pushed[0][1] is not None
+
+
+def test_action_promote_pushes_target_modal(monkeypatch):
+    """action_promote pushes a PromoteTargetModal screen with a callback."""
+    from infrabeat_erp.presentation import tui_app
+
+    app = tui_app.InfraBeatApp()
+    pushed = []
+
+    def fake_push(screen, callback=None):
+        pushed.append((type(screen).__name__, callback))
+
+    monkeypatch.setattr(app, "push_screen", fake_push)
+    app.action_promote()
+
+    assert len(pushed) == 1
+    assert pushed[0][0] == "PromoteTargetModal"
+    assert pushed[0][1] is not None
+
+
+def test_vm_select_modal_dismisses_with_button_id(monkeypatch):
+    """VmSelectModal.on_button_pressed(staging) -> dismiss('staging')."""
+    from infrabeat_erp.presentation.tui_app import VmSelectModal
+
+    modal = VmSelectModal("test")
+    captured = []
+    monkeypatch.setattr(modal, "dismiss", lambda v: captured.append(v))
+
+    class FakeButton:
+        id = "staging"
+
+    class FakeEvent:
+        button = FakeButton()
+
+    modal.on_button_pressed(FakeEvent())
+    assert captured == ["staging"]
+
+
+def test_vm_select_modal_cancel_dismisses_none(monkeypatch):
+    """VmSelectModal cancel button -> dismiss(None)."""
+    from infrabeat_erp.presentation.tui_app import VmSelectModal
+
+    modal = VmSelectModal("test")
+    captured = []
+    monkeypatch.setattr(modal, "dismiss", lambda v: captured.append(v))
+
+    class FakeButton:
+        id = "cancel"
+
+    class FakeEvent:
+        button = FakeButton()
+
+    modal.on_button_pressed(FakeEvent())
+    assert captured == [None]
+
+
+def test_promote_target_modal_dismisses_with_button_id(monkeypatch):
+    """PromoteTargetModal.on_button_pressed(production) -> dismiss('production')."""
+    from infrabeat_erp.presentation.tui_app import PromoteTargetModal
+
+    modal = PromoteTargetModal()
+    captured = []
+    monkeypatch.setattr(modal, "dismiss", lambda v: captured.append(v))
+
+    class FakeButton:
+        id = "production"
+
+    class FakeEvent:
+        button = FakeButton()
+
+    modal.on_button_pressed(FakeEvent())
+    assert captured == ["production"]
