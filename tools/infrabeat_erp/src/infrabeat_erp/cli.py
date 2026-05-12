@@ -840,3 +840,75 @@ def backup(vm_name: str, output_dir, no_files: bool):
         _sys.exit(1)
     finally:
         adapter.shutdown()
+
+
+
+# =============================================================================
+# Task 3: github-pat group + promote command
+# =============================================================================
+
+
+@main.group(name="github-pat")
+def github_pat():
+    """Manage GitHub Personal Access Token for promote subcommand."""
+    pass
+
+
+@github_pat.command(name="set")
+@click.option("--token", prompt="GitHub PAT (input hidden)", hide_input=True)
+def github_pat_set(token):
+    """Store a GitHub PAT in OS keyring."""
+    from .infrastructure.pat_store import store_pat
+    import sys as _sys
+    try:
+        store_pat(token)
+        click.echo("OK: PAT stored in OS keyring (service=infrabeat-erp-github)")
+    except ValueError as e:
+        click.echo(f"ERROR: {e}", err=True)
+        _sys.exit(1)
+
+
+@github_pat.command(name="clear")
+def github_pat_clear():
+    """Remove the stored GitHub PAT."""
+    from .infrastructure.pat_store import clear_pat
+    if clear_pat():
+        click.echo("OK: PAT removed from keyring")
+    else:
+        click.echo("INFO: no PAT was stored")
+
+
+@github_pat.command(name="check")
+def github_pat_check():
+    """Check if a PAT is stored (does not display the token)."""
+    from .infrastructure.pat_store import has_pat
+    if has_pat():
+        click.echo("PAT: stored")
+    else:
+        click.echo("PAT: not stored (run 'infrabeat-erp github-pat set')")
+
+
+@main.command()
+@click.argument("target", type=click.Choice(["staging", "production"]))
+@click.option("--title", default=None, help="PR title (default: 'Promote <source> -> <target>')")
+@click.option("--body", default="", help="PR body markdown")
+@click.option("--confirm", is_flag=True, default=False, help="Required for production")
+def promote(target, title, body, confirm):
+    """Promote source -> target via PR + CI poll + squash-merge (replaces gh CLI)."""
+    import asyncio as _asyncio
+    import sys as _sys
+    from .application.promote import do_promote, PromoteError
+
+    if target == "production" and not confirm:
+        click.echo("ERROR: --confirm required for production promotes", err=True)
+        _sys.exit(1)
+
+    click.echo(f"Promoting -> {target}... (may take 1-10 min for CI)")
+    try:
+        result = _asyncio.run(do_promote(target, title=title, body=body))
+        click.echo(f"OK: PR #{result.pr_number} merged into {result.target_branch}")
+        click.echo(f"     URL: {result.pr_url}")
+        click.echo(f"     Duration: {result.duration_seconds:.1f}s")
+    except PromoteError as e:
+        click.echo(f"Promote FAILED: {e}", err=True)
+        _sys.exit(1)
