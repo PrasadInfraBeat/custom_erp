@@ -28,3 +28,8 @@ tools/infrabeat_erp/.secrets/
 
 # L67 mitigation (Phase 7a Sprint 0 Task G): gh CLI commit-message temp file
 .git_commit_msg.tmp
+
+# pytest-cov artifact
+.coverage
+.coverage.*
+htmlcov/

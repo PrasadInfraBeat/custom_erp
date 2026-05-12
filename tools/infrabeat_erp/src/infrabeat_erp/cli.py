@@ -796,3 +796,40 @@ def doctor(verbose: bool) -> None:
     from .application.doctor import main as _doctor_main
     import sys as _sys
     _sys.exit(_doctor_main(verbose=verbose))
+
+
+@main.command()
+@click.argument("vm_name", type=click.Choice(["staging", "production"]))
+@click.option("--output-dir", type=click.Path(), default=None, help="Local backup directory")
+def backup(vm_name: str, output_dir):
+    """Backup a VM's ERPNext site DB. Sprint 2 Task 1 MVP (staging/production only)."""
+    import asyncio as _asyncio
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    from .application.backup import (
+        DEFAULT_BACKUP_DIR,
+        BackupError,
+        do_backup,
+    )
+    from .application.doctor import INFRABEAT_SSH_KEY
+    from .infrastructure.ssh_adapter import SshAdapter
+
+    if not INFRABEAT_SSH_KEY.exists():
+        click.echo(f"SSH key missing: {INFRABEAT_SSH_KEY}", err=True)
+        click.echo("Run: python scripts/bootstrap_ssh_keys.py", err=True)
+        _sys.exit(1)
+
+    out_dir = _Path(output_dir) if output_dir else DEFAULT_BACKUP_DIR
+    adapter = SshAdapter(INFRABEAT_SSH_KEY)
+    click.echo(f"Backing up {vm_name}... (may take a few minutes)")
+    try:
+        result = _asyncio.run(do_backup(vm_name, adapter, out_dir))
+        size_mb = result.db_size_bytes / 1024 / 1024
+        click.echo(f"OK: {result.local_db_path}")
+        click.echo(f"     {size_mb:.1f} MB | sha256={result.db_sha256[:16]}... | {result.duration_seconds:.1f}s")
+    except BackupError as e:
+        click.echo(f"Backup FAILED: {e}", err=True)
+        _sys.exit(1)
+    finally:
+        adapter.shutdown()
