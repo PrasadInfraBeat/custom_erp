@@ -508,3 +508,21 @@ def test_migrate_secrets_all_skips_production_without_flag(
     assert "production" not in migrated
     assert set(migrated) == {"dev", "staging"}
     assert "production: skipped" in result.output
+
+
+# === Task 1c: audit subcommand routing (post-6C.3 fix) ===
+
+
+def test_audit_resolve_doctor():
+    from infrabeat_erp.cli import _audit_resolve
+    assert _audit_resolve(["doctor"]) == ("doctor", None)
+
+
+def test_audit_resolve_backup_with_vm():
+    from infrabeat_erp.cli import _audit_resolve
+    assert _audit_resolve(["backup", "staging"]) == ("backup", "staging")
+
+
+def test_audit_resolve_unknown_falls_back_to_help():
+    from infrabeat_erp.cli import _audit_resolve
+    assert _audit_resolve(["unknown-cmd"]) == ("help", None)
