@@ -67,5 +67,49 @@ class SshAdapter:
             self._executor, self._exec_sync, host, user, command, timeout
         )
 
+    def _download_sync(
+        self, host: str, user: str, remote_path: str, local_path: str, timeout: int
+    ) -> None:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(
+                hostname=host,
+                username=user,
+                pkey=self._load_pkey(),
+                timeout=10,
+                banner_timeout=10,
+                auth_timeout=5,
+                allow_agent=False,
+                look_for_keys=False,
+            )
+            sftp = client.open_sftp()
+            try:
+                sftp.get(remote_path, local_path)
+            finally:
+                sftp.close()
+        finally:
+            client.close()
+
+    async def download_file(
+        self,
+        host: str,
+        user: str,
+        remote_path: str,
+        local_path: Path,
+        timeout: int = 300,
+    ) -> None:
+        """Async SFTP download. Blocks the executor thread for the duration."""
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            self._executor,
+            self._download_sync,
+            host,
+            user,
+            remote_path,
+            str(local_path),
+            timeout,
+        )
+
     def shutdown(self) -> None:
         self._executor.shutdown(wait=False)
