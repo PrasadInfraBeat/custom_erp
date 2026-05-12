@@ -16,6 +16,7 @@ dependencies = [
     "keyring>=24,<26",
     "cryptography>=42,<46",
     "textual>=0.50",
+    "paramiko>=3.0",
 ]
 
 [project.optional-dependencies]
