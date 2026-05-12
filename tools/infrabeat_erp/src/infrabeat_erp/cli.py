@@ -567,7 +567,7 @@ _AUDIT_VM_ALIASES = frozenset(["dev", "staging", "production"])
 
 def _audit_resolve(argv_tail: list) -> tuple:
     positionals = [str(a) for a in argv_tail if not str(a).startswith("-")]
-    if not positionals or positionals[0] not in _AUDIT_SUBCOMMANDS:
+    if not positionals or positionals[0] not in main.commands:
         return "help", None
     vm = None
     if len(positionals) > 1 and positionals[1] in _AUDIT_VM_ALIASES:
