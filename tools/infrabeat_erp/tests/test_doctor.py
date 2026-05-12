@@ -7,16 +7,20 @@ import pytest
 
 from infrabeat_erp.application.doctor import (
     EXPECTED_VM_CREDENTIALS,
+    INFRABEAT_SSH_KEY,
+    VMS,
     CheckResult,
     check_audit_dir,
     check_gh_cli,
     check_keyring_backend,
     check_python_version,
     check_vm_credentials,
+    check_vm_ssh,
     format_results,
     main,
     run_all,
 )
+from infrabeat_erp.application import doctor
 
 
 def test_python_version_returns_info():
@@ -100,14 +104,14 @@ def test_format_results_includes_summary():
     assert "fix it" in output
 
 
-def test_run_all_returns_5_checks():
+def test_run_all_returns_8_checks():
     with patch("infrabeat_erp.application.doctor.keyring.get_password", return_value=None), \
          patch("infrabeat_erp.application.doctor.keyring.get_keyring") as kr_mock, \
          patch("infrabeat_erp.application.doctor.shutil.which", return_value=None):
         kr_mock.return_value.__class__.__module__ = "keyring.backends.Windows"
         kr_mock.return_value.__class__.__name__ = "WinVaultKeyring"
         results = run_all()
-    assert len(results) == 5
+    assert len(results) == 8
 
 
 def test_main_returns_1_if_any_fail(capsys, monkeypatch):
@@ -117,3 +121,91 @@ def test_main_returns_1_if_any_fail(capsys, monkeypatch):
     captured = capsys.readouterr()
     assert rc == 1
     assert "FAIL" in captured.out
+
+
+# ---- VM SSH reachability tests (Sprint 1 Task 2) ----
+
+
+def test_check_vm_ssh_missing_key(tmp_path, monkeypatch):
+    """When SSH key file is missing, all 3 VMs report FAIL with bootstrap remediation."""
+    monkeypatch.setattr(doctor, "INFRABEAT_SSH_KEY", tmp_path / "nonexistent_key")
+    results = doctor.check_vm_ssh()
+    assert len(results) == 3
+    assert all(r.status == "FAIL" for r in results)
+    assert all("bootstrap_ssh_keys.py" in (r.remediation or "") for r in results)
+
+
+def test_check_vm_ssh_corrupt_key(tmp_path, monkeypatch):
+    """When SSH key file is unreadable as ed25519, all 3 VMs report FAIL."""
+    bad_key = tmp_path / "bad_key"
+    bad_key.write_text("not a real key")
+    monkeypatch.setattr(doctor, "INFRABEAT_SSH_KEY", bad_key)
+    results = doctor.check_vm_ssh()
+    assert len(results) == 3
+    assert all(r.status == "FAIL" for r in results)
+    assert all("Failed to load SSH key" in r.detail for r in results)
+
+
+def test_check_vm_ssh_all_pass(monkeypatch, tmp_path):
+    """When paramiko connects successfully for all 3 VMs, all report PASS."""
+    key = tmp_path / "fake_key"
+    key.write_text("anything")
+    monkeypatch.setattr(doctor, "INFRABEAT_SSH_KEY", key)
+    monkeypatch.setattr(
+        doctor.paramiko.Ed25519Key, "from_private_key", staticmethod(lambda _: "FAKE_PKEY")
+    )
+
+    class FakeStdout:
+        def read(self):
+            return b"erp-vm\n"
+
+    class FakeClient:
+        def set_missing_host_key_policy(self, *_):
+            pass
+
+        def connect(self, **_):
+            pass
+
+        def exec_command(self, *_, **__):
+            return None, FakeStdout(), None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(doctor.paramiko, "SSHClient", lambda: FakeClient())
+    results = doctor.check_vm_ssh()
+    assert len(results) == 3
+    assert all(r.status == "PASS" for r in results)
+    assert all("erp-vm" in r.detail for r in results)
+
+
+def test_check_vm_ssh_one_timeout(monkeypatch, tmp_path):
+    """When paramiko raises socket.timeout on connect, that VM reports FAIL with retry remediation."""
+    import socket
+
+    key = tmp_path / "fake_key"
+    key.write_text("anything")
+    monkeypatch.setattr(doctor, "INFRABEAT_SSH_KEY", key)
+    monkeypatch.setattr(
+        doctor.paramiko.Ed25519Key, "from_private_key", staticmethod(lambda _: "FAKE_PKEY")
+    )
+
+    class FakeClient:
+        def set_missing_host_key_policy(self, *_):
+            pass
+
+        def connect(self, **_):
+            raise socket.timeout("timed out")
+
+        def exec_command(self, *_, **__):
+            return None, None, None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(doctor.paramiko, "SSHClient", lambda: FakeClient())
+    results = doctor.check_vm_ssh()
+    assert len(results) == 3
+    assert all(r.status == "FAIL" for r in results)
+    assert all("timed out" in r.detail for r in results)
+    assert all("bootstrap_ssh_keys.py" in (r.remediation or "") for r in results)
