@@ -104,14 +104,14 @@ def test_format_results_includes_summary():
     assert "fix it" in output
 
 
-def test_run_all_returns_8_checks():
+def test_run_all_returns_9_checks():
     with patch("infrabeat_erp.application.doctor.keyring.get_password", return_value=None), \
          patch("infrabeat_erp.application.doctor.keyring.get_keyring") as kr_mock, \
          patch("infrabeat_erp.application.doctor.shutil.which", return_value=None):
         kr_mock.return_value.__class__.__module__ = "keyring.backends.Windows"
         kr_mock.return_value.__class__.__name__ = "WinVaultKeyring"
         results = run_all()
-    assert len(results) == 8
+    assert len(results) == 9
 
 
 def test_main_returns_1_if_any_fail(capsys, monkeypatch):
@@ -209,3 +209,25 @@ def test_check_vm_ssh_one_timeout(monkeypatch, tmp_path):
     assert all(r.status == "FAIL" for r in results)
     assert all("timed out" in r.detail for r in results)
     assert all("bootstrap_ssh_keys.py" in (r.remediation or "") for r in results)
+
+
+# === Sprint 3 Task 3.1: check_github_pat tests ===
+
+
+def test_check_github_pat_returns_info_when_no_pat(monkeypatch):
+    monkeypatch.setattr(
+        "infrabeat_erp.infrastructure.pat_store.has_pat", lambda: False
+    )
+    from infrabeat_erp.application.doctor import check_github_pat
+    r = check_github_pat()
+    assert r.name == "github-pat"
+    assert r.status == "INFO"
+
+
+def test_check_github_pat_returns_pass_when_pat_stored(monkeypatch):
+    monkeypatch.setattr(
+        "infrabeat_erp.infrastructure.pat_store.has_pat", lambda: True
+    )
+    from infrabeat_erp.application.doctor import check_github_pat
+    r = check_github_pat()
+    assert r.status == "PASS"
