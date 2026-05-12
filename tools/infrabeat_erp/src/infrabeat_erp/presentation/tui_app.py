@@ -1,22 +1,23 @@
-"""InfraBeat Console - Textual TUI application.
-
-Phase 7a Sprint 1 Task 3 (spec C1): static 3-VM dashboard with hotkey grid.
-Live data wiring comes in Sprint 1 Task 4 (spec C2): async SSH polling.
-
-Spec reference: docs/12_INFRABEAT_CONSOLE_SPEC.md Section 3 (Visual Design).
-"""
+"""InfraBeat Console - Textual TUI with live SSH polling (Sprint 1 Task 4, spec C2)."""
 from __future__ import annotations
 
+import asyncio
 import sys
+from typing import Optional
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header, Static
 
+from ..application.doctor import INFRABEAT_SSH_KEY, VMS
+from ..application.vm_status_poller import poll_all
+from ..domain.vm_status import VmStatus
+from ..infrastructure.ssh_adapter import SshAdapter
+
 
 class VmCard(Static):
-    """Card displaying status of one VM. Static placeholders for Sprint 1 Task 3."""
+    """Stateful card displaying live VM status. Refreshes on update_status()."""
 
     DEFAULT_CSS = """
     VmCard {
@@ -31,30 +32,64 @@ class VmCard(Static):
         super().__init__(**kwargs)
         self.vm_name = name
         self.ip = ip
+        self._status: Optional[VmStatus] = None
+
+    def update_status(self, status: VmStatus) -> None:
+        self._status = status
+        self.refresh()
 
     def render(self) -> str:
+        if self._status is None:
+            return (
+                f"[bold]{self.vm_name.upper()}[/bold]\n"
+                f"[dim]{self.ip}[/dim]\n\n"
+                f"[yellow]Loading...[/yellow]"
+            )
+        s = self._status
+        if not s.reachable:
+            return (
+                f"[bold red]{self.vm_name.upper()}[/bold red]\n"
+                f"[dim]{self.ip}[/dim]\n\n"
+                f"[red]UNREACHABLE[/red]\n"
+                f"[dim]{(s.error or 'no detail')[:60]}[/dim]"
+            )
+        if s.error:
+            return (
+                f"[bold yellow]{self.vm_name.upper()}[/bold yellow]\n"
+                f"[dim]{self.ip}[/dim]\n\n"
+                f"[yellow]DEGRADED[/yellow]\n"
+                f"[dim]{(s.error or '')[:60]}[/dim]\n"
+                f"\nUpdated: {s.timestamp.strftime('%H:%M:%S')}"
+            )
+        age_str = "-"
+        if s.last_commit_age_seconds is not None:
+            mins = s.last_commit_age_seconds // 60
+            if mins < 60:
+                age_str = f"{mins}m ago"
+            elif mins < 1440:
+                age_str = f"{mins // 60}h ago"
+            else:
+                age_str = f"{mins // 1440}d ago"
+        stale_badge = " [yellow](stale)[/yellow]" if s.is_stale(max_age_seconds=15) else ""
         return (
-            f"[bold]{self.vm_name.upper()}[/bold]\n"
-            f"[dim]{self.ip}[/dim]\n"
+            f"[bold green]{self.vm_name.upper()}[/bold green]{stale_badge}\n"
+            f"[dim]{self.ip}[/dim]\n\n"
+            f"Branch:    [cyan]{s.branch or '-'}[/cyan]\n"
+            f"Commit:    [cyan]{s.commit_short or '-'}[/cyan]\n"
             f"\n"
-            f"Branch:    [yellow]-[/yellow]\n"
-            f"Commit:    [yellow]-[/yellow]\n"
-            f"Status:    [yellow]Loading...[/yellow]\n"
+            f"Last commit: {age_str}\n"
             f"\n"
-            f"Services:  [yellow]-/7[/yellow]\n"
-            f"Site:      [yellow]-[/yellow]\n"
-            f"MCP:       [yellow]-[/yellow]\n"
-            f"Disk:      [yellow]-[/yellow]\n"
-            f"\n"
-            f"Last deploy: [yellow]-[/yellow]"
+            f"Updated:   [dim]{s.timestamp.strftime('%H:%M:%S')}[/dim]"
         )
 
 
 class InfraBeatApp(App):
-    """InfraBeat Control Center: single-pane TUI for 3-VM ERPNext."""
+    """InfraBeat Control Center: live 3-VM TUI."""
 
     TITLE = "INFRABEAT CONTROL CENTER"
-    SUB_TITLE = "Phase 7a Sprint 1 (C1: static dashboard)"
+    SUB_TITLE = "Phase 7a Sprint 1 (C2: live SSH polling)"
+
+    POLL_INTERVAL_SECONDS = 5.0
 
     CSS = """
     #vm_grid {
@@ -79,18 +114,59 @@ class InfraBeatApp(App):
         Binding("q", "quit", "[Q]uit", show=True, priority=True),
     ]
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._ssh_adapter: Optional[SshAdapter] = None
+        self._poll_task: Optional[asyncio.Task] = None
+        self._cards: dict[str, VmCard] = {}
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Horizontal(id="vm_grid"):
-            yield VmCard("dev", "10.1.0.184")
-            yield VmCard("staging", "10.1.0.185")
-            yield VmCard("production", "10.1.0.186")
+            for vm in VMS:
+                card = VmCard(vm["name"], vm["host"])
+                self._cards[vm["name"]] = card
+                yield card
         yield Footer()
+
+    async def on_mount(self) -> None:
+        if not INFRABEAT_SSH_KEY.exists():
+            self.notify(
+                "InfraBeat SSH key missing - run scripts/bootstrap_ssh_keys.py",
+                severity="warning",
+                timeout=10,
+            )
+            return
+        self._ssh_adapter = SshAdapter(INFRABEAT_SSH_KEY)
+        self._poll_task = asyncio.create_task(self._poll_loop())
+
+    async def _poll_loop(self) -> None:
+        while True:
+            try:
+                statuses = await poll_all(self._ssh_adapter, VMS)
+                for status in statuses:
+                    if status.name in self._cards:
+                        self._cards[status.name].update_status(status)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                self.notify(
+                    f"Poll error: {type(e).__name__}: {e}",
+                    severity="error",
+                    timeout=5,
+                )
+            await asyncio.sleep(self.POLL_INTERVAL_SECONDS)
+
+    async def on_unmount(self) -> None:
+        if self._poll_task:
+            self._poll_task.cancel()
+        if self._ssh_adapter:
+            self._ssh_adapter.shutdown()
 
     # ====== Action handlers (placeholders, wired in later C-phases) ======
 
     def action_promote(self) -> None:
-        self.notify("Promote dev->staging (Task 4 C3)", severity="information")
+        self.notify("Promote dev->staging (Sprint 2 C3)", severity="information")
 
     def action_deploy(self) -> None:
         self.notify("Deploy staging->prod (Sprint 2 C4)", severity="information")
@@ -127,7 +203,7 @@ class InfraBeatApp(App):
 
 
 def run() -> int:
-    """Entry point for `infrabeat` console-script when not --check mode."""
+    """Entry point for `infrabeat` console-script."""
     app = InfraBeatApp()
     app.run()
     return 0
