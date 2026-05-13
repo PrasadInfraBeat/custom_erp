@@ -1,0 +1,18 @@
+---
+all:
+  vars:
+    ansible_ssh_private_key_file: ~/.ssh/infrabeat_ed25519
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ansible_python_interpreter: /usr/bin/python3
+  hosts:
+    staging:
+      ansible_host: 10.1.0.185
+      ansible_user: erpadmin
+      bench_user: erpadmin
+      bench_path: /home/erpadmin/frappe-bench
+      site_name: erp.staging
+      branch_name: staging
+      bench_mode: production
+      node_version: "18"
+      frappe_branch: version-15
+      erpnext_branch: version-15
