@@ -893,3 +893,64 @@ def promote(target, title, body, confirm):
     except PromoteError as e:
         click.echo(f"Promote FAILED: {e}", err=True)
         _sys.exit(1)
+
+
+# ============================================================================
+# Phase 7b Sprint 0 Task B: rollback subcommand
+# ============================================================================
+@main.command()
+@click.argument("env", type=click.Choice(["staging", "production"]))
+@click.option(
+    "--confirm",
+    is_flag=True,
+    default=False,
+    help="Required for production rollback. Bypasses safety gate.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Compute the rollback target without making any GitHub API changes.",
+)
+@click.option(
+    "--no-admin",
+    is_flag=True,
+    default=False,
+    help="Disable admin bypass on merge (use only if you have approving reviewers).",
+)
+def rollback(env: str, confirm: bool, dry_run: bool, no_admin: bool) -> None:
+    """Rollback staging or production to the prior good SHA (env tip's first parent).
+
+    Strategy: opens a PR with a synthetic commit whose tree matches the parent of
+    the current env tip, then admin-squash-merges. Audit-trail-preserving (full
+    commit history retained; no force-push).
+    """
+    from infrabeat_erp.application.rollback import RollbackError, rollback_sync
+
+    try:
+        result = rollback_sync(
+            env=env,
+            confirm=confirm,
+            dry_run=dry_run,
+            admin=not no_admin,
+        )
+    except RollbackError as exc:
+        click.echo(f"ROLLBACK_FAILED: {exc}", err=True)
+        sys.exit(2)
+
+    if dry_run:
+        click.echo(
+            f"DRY_RUN: would rollback {result.env} from "
+            f"{result.rolled_back_from_sha[:7]} to {result.rolled_back_to_sha[:7]}"
+        )
+        return
+
+    click.echo("ROLLBACK_SUCCESS")
+    click.echo(f"  env:             {result.env}")
+    click.echo(f"  from_sha:        {result.rolled_back_from_sha[:12]}")
+    click.echo(f"  to_sha:          {result.rolled_back_to_sha[:12]}")
+    click.echo(f"  rollback_branch: {result.rollback_branch}")
+    click.echo(f"  pr_number:       #{result.pr_number}")
+    click.echo(f"  pr_url:          {result.pr_url}")
+    _merge_sha_disp = result.merge_sha[:12] if result.merge_sha else "pending"
+    click.echo(f"  merge_sha:       {_merge_sha_disp}")
