@@ -38,6 +38,7 @@ import json
 import sys
 from dataclasses import asdict
 
+from infrabeat_erp.application.smoke import smoke_vm
 from infrabeat_erp.infrastructure import config, http, mcp, oauth, secrets_store
 from infrabeat_erp.infrastructure.mcp import MCPError, MCPProtocolError
 from infrabeat_erp.infrastructure.oauth import (
@@ -123,57 +124,37 @@ def smoke(vm_alias: str, as_json: bool) -> None:
     """Initialize MCP and list tools - full-stack health check for VM_ALIAS."""
     _ensure_production_allowed(vm_alias)
     try:
-        vm_config = config.get_vm(vm_alias)
+        result = smoke_vm(vm_alias)
+    except SecretsNotFound:
+        click.echo(f"no tokens for {vm_alias}; run login first", err=True)
+        sys.exit(1)
+    except MCPProtocolError as exc:
+        click.echo(f"MCP protocol error: {exc}", err=True)
+        sys.exit(3)
+    except MCPError as exc:
+        click.echo(f"MCP error: {exc}", err=True)
+        sys.exit(2)
     except Exception:
         click.echo(f"unknown vm: {vm_alias}", err=True)
         sys.exit(1)
 
-    try:
-        secrets = secrets_store.load_secrets(vm_alias)
-    except SecretsNotFound:
-        click.echo(
-            f"no tokens for {vm_alias}; run login first", err=True
-        )
-        sys.exit(1)
-
-    with http.make_client(
-        vm_config.base_url, access_token=secrets["access_token"]
-    ) as client:
-        try:
-            caps = mcp.initialize(client)
-        except MCPProtocolError as exc:
-            click.echo(f"MCP protocol error: {exc}", err=True)
-            sys.exit(3)
-        except MCPError as exc:
-            click.echo(f"MCP error: {exc}", err=True)
-            sys.exit(2)
-
-        try:
-            tools = mcp.list_tools(client)
-        except MCPProtocolError as exc:
-            click.echo(f"MCP protocol error: {exc}", err=True)
-            sys.exit(3)
-        except MCPError as exc:
-            click.echo(f"MCP error: {exc}", err=True)
-            sys.exit(2)
-
     if as_json:
         payload = {
-            "vm": vm_alias,
-            "server_name": caps.server_name,
-            "server_version": caps.server_version,
-            "protocol_version": caps.protocol_version,
-            "tool_count": len(tools),
-            "tools": [tool.name for tool in tools],
+            "vm": result.vm,
+            "server_name": result.server_name,
+            "server_version": result.server_version,
+            "protocol_version": result.protocol_version,
+            "tool_count": result.tool_count,
+            "tools": result.tools,
         }
         click.echo(json.dumps(payload, indent=2))
     else:
-        click.echo(f"VM: {vm_alias}")
-        click.echo(f"Server: {caps.server_name} {caps.server_version}")
-        click.echo(f"Protocol: {caps.protocol_version}")
-        click.echo(f"Tools available: {len(tools)}")
-        for tool in tools:
-            click.echo(f"  - {tool.name}")
+        click.echo(f"VM: {result.vm}")
+        click.echo(f"Server: {result.server_name} {result.server_version}")
+        click.echo(f"Protocol: {result.protocol_version}")
+        click.echo(f"Tools available: {result.tool_count}")
+        for tool_name in result.tools:
+            click.echo(f"  - {tool_name}")
 
 
 # === Phase 6B.5 SUBCOMMANDS ===

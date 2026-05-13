@@ -22,6 +22,7 @@ from textual.containers import Vertical
 from textual import work
 from infrabeat_erp.application.backup import do_backup
 from infrabeat_erp.application.promote import do_promote
+from infrabeat_erp.application.smoke import smoke_vm
 
 
 class VmCard(Static):
@@ -283,7 +284,24 @@ class InfraBeatApp(App):
             log.write(f"[bold red][promote ERROR][/bold red] {type(e).__name__}: {e}")
             self.notify(f"Promote to {target} failed: {e}", severity="error", timeout=10)
 
-    # ====== Action handlers (LIVE for [B][P], stubs for others) ======
+    @work(exclusive=True, group="ops", thread=True)
+    def _run_smoke_worker(self, vm: str) -> None:
+        """Run smoke_vm(vm) in thread; UI updates via call_from_thread."""
+        log = self.query_one("#output_log", RichLog)
+        self.call_from_thread(log.write, f"[bold cyan][smoke][/bold cyan] starting on [bold]{vm}[/bold]...")
+        self.call_from_thread(self.notify, f"Smoke on {vm} started", severity="information", timeout=3)
+        try:
+            result = smoke_vm(vm)
+            self.call_from_thread(log.write, "[bold green][smoke][/bold green] complete:")
+            self.call_from_thread(log.write, f"  server = {result.server_name} {result.server_version}")
+            self.call_from_thread(log.write, f"  protocol = {result.protocol_version}")
+            self.call_from_thread(log.write, f"  tools = {result.tool_count}")
+            self.call_from_thread(self.notify, f"Smoke {vm}: {result.tool_count} tools OK", severity="information", timeout=5)
+        except Exception as e:
+            self.call_from_thread(log.write, f"[bold red][smoke ERROR][/bold red] {type(e).__name__}: {e}")
+            self.call_from_thread(self.notify, f"Smoke {vm} failed: {e}", severity="error", timeout=10)
+
+    # ====== Action handlers (LIVE for [B][S][P], stubs for others) ======
 
     def action_promote(self) -> None:
         """[P] -> Target picker -> spawn promote worker."""
@@ -305,7 +323,12 @@ class InfraBeatApp(App):
         self.push_screen(VmSelectModal("Backup"), _on_vm_selected)
 
     def action_smoke(self) -> None:
-        self.notify("Smoke tests (Sprint 2 C5)", severity="information")
+        """[S] -> VM picker -> spawn smoke worker (thread, since smoke_vm is sync)."""
+        def _on_vm_selected(vm: Optional[str]) -> None:
+            if vm:
+                self._run_smoke_worker(vm)
+
+        self.push_screen(VmSelectModal("Smoke"), _on_vm_selected)
 
     def action_logs(self) -> None:
         self.notify("Live logs (Phase 7b C6)", severity="information")
