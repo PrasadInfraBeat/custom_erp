@@ -1,0 +1,42 @@
+---
+# Phase 7b Sprint 0 Task A - SSH key distribution (idempotent)
+# Ports scripts/bootstrap_ssh_keys.py to native ansible.posix.authorized_key.
+- name: Distribute laptop SSH public key to VM
+  hosts: all
+  gather_facts: false
+  vars:
+    laptop_pub_key_path: "~/.ssh/infrabeat_ed25519.pub"
+  tasks:
+    - name: Read laptop public key
+      ansible.builtin.set_fact:
+        laptop_pub_key: "{{ lookup('file', laptop_pub_key_path) }}"
+      delegate_to: localhost
+      become: false
+      tags: [keys]
+
+    - name: Ensure ~/.ssh exists for ansible_user
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.ssh"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0700"
+      tags: [keys]
+
+    - name: Add public key to authorized_keys
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ laptop_pub_key }}"
+        state: present
+      tags: [keys]
+
+    - name: Verify SSH key auth working
+      ansible.builtin.command: whoami
+      register: whoami_out
+      changed_when: false
+      tags: [verify]
+
+    - name: Report SSH user
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: SSH as {{ whoami_out.stdout }}"
+      tags: [verify]

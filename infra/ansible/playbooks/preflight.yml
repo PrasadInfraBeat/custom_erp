@@ -1,0 +1,42 @@
+---
+# Phase 7b Sprint 0 Task A - Pre-flight checks (~10s per VM)
+- name: Pre-flight (ping, sudo, bench path)
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Ping VM
+      ansible.builtin.ping:
+      tags: [ping]
+
+    - name: Verify sudo works passwordless
+      ansible.builtin.command: sudo -n true
+      changed_when: false
+      tags: [sudo]
+
+    - name: Check bench path exists
+      ansible.builtin.stat:
+        path: "{{ bench_path }}"
+      register: bench_stat
+      tags: [paths]
+
+    - name: Assert bench path is a directory
+      ansible.builtin.assert:
+        that:
+          - bench_stat.stat.exists
+          - bench_stat.stat.isdir
+        fail_msg: "bench_path {{ bench_path }} missing on {{ inventory_hostname }}"
+      tags: [paths]
+
+    - name: Detect bench wrapper
+      ansible.builtin.command: which bench
+      register: bench_which
+      changed_when: false
+      failed_when: false
+      become: true
+      become_user: "{{ bench_user }}"
+      tags: [paths]
+
+    - name: Report bench wrapper location
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: bench at {{ bench_which.stdout | default('NOT_FOUND') }}"
+      tags: [paths]

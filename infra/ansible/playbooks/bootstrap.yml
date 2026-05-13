@@ -1,0 +1,119 @@
+---
+# Phase 7b Sprint 0 Task A - VM bootstrap (system prereqs + version detection)
+# Scope: OS-level prereqs, Node 18.x (Gotcha 5), bench/ERPNext/FAC detection.
+# OUT OF SCOPE: full bench install (30+ min, operator runbook step per closure 14).
+- name: VM bootstrap - system prereqs + sanity checks
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    base_packages:
+      - git
+      - python3-dev
+      - python3-pip
+      - python3-setuptools
+      - python3-venv
+      - software-properties-common
+      - mariadb-client
+      - redis-tools
+      - supervisor
+      - nginx
+      - wkhtmltopdf
+      - curl
+      - build-essential
+      - libffi-dev
+      - libssl-dev
+      - libxml2-dev
+      - libxslt1-dev
+      - libjpeg-dev
+  tasks:
+    - name: Update apt cache (valid 1h)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      tags: [packages]
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name: "{{ base_packages }}"
+        state: present
+      tags: [packages]
+
+    - name: Check Node.js version
+      ansible.builtin.command: node --version
+      register: node_check
+      changed_when: false
+      failed_when: false
+      tags: [node]
+
+    - name: Add NodeSource repository for Node 18.x (Gotcha 5 - never 20+)
+      ansible.builtin.shell: |
+        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+      args:
+        creates: /etc/apt/sources.list.d/nodesource.list
+      when: node_check.rc != 0 or not node_check.stdout.startswith('v18')
+      tags: [node]
+
+    - name: Install Node 18.x
+      ansible.builtin.apt:
+        name: nodejs
+        state: present
+      when: node_check.rc != 0 or not node_check.stdout.startswith('v18')
+      tags: [node]
+
+    - name: Install yarn globally
+      community.general.npm:
+        name: yarn
+        global: true
+        state: present
+      tags: [node]
+
+    - name: Detect bench install
+      ansible.builtin.command: which bench
+      register: bench_check
+      changed_when: false
+      failed_when: false
+      become_user: "{{ bench_user }}"
+      tags: [bench]
+
+    - name: Report bench presence
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: bench {{ 'PRESENT at ' + bench_check.stdout if bench_check.rc == 0 else 'MISSING (operator runbook)' }}"
+      tags: [bench]
+
+    - name: Detect installed apps
+      ansible.builtin.command: cat {{ bench_path }}/sites/apps.txt
+      register: apps_check
+      changed_when: false
+      failed_when: false
+      become_user: "{{ bench_user }}"
+      tags: [apps]
+
+    - name: Verify frappe and erpnext present
+      ansible.builtin.assert:
+        that:
+          - "'frappe' in apps_check.stdout"
+          - "'erpnext' in apps_check.stdout"
+        fail_msg: "{{ inventory_hostname }}: frappe/erpnext missing from apps.txt (see README)"
+        success_msg: "{{ inventory_hostname }}: frappe + erpnext present"
+      when: apps_check.rc == 0
+      tags: [apps]
+
+    - name: Detect FAC (frappe_assistant_core)
+      ansible.builtin.shell: |
+        grep -q '^frappe_assistant_core$' {{ bench_path }}/sites/apps.txt
+      register: fac_check
+      changed_when: false
+      failed_when: false
+      become_user: "{{ bench_user }}"
+      tags: [fac]
+
+    - name: Report FAC status
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: FAC {{ 'INSTALLED' if fac_check.rc == 0 else 'MISSING (bench get-app + install-app)' }}"
+      tags: [fac]
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: site {{ site_name }} on branch {{ branch_name }} in {{ bench_mode }} mode"
+      tags: [report]
