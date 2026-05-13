@@ -7,3 +7,29 @@ node_modules
 __pycache__
 .claude/audit_log/
 .claude/verify_doctype_paths.ps1
+
+# OAuth client credentials per VM (never committed)
+tools/infrabeat_erp/.secrets/
+
+# OAuth client credentials per VM (never committed)
+tools/infrabeat_erp/.secrets/
+
+# === Phase 6B closure: gitignore correction + Phase 6C preempt ===
+# Secrets at any nesting level (Phase 6B CLI writes at CWD-relative ./.secrets/,
+# Phase 5 scripts wrote at tools/infrabeat_erp/.secrets/, both covered).
+# Phase 6C will promote secrets to OS keyring, retiring this storage entirely.
+.secrets/
+
+# One-off helper scripts placed at repo root for surgical operations
+# (Should never have been committed; these patterns prevent future recurrence)
+/apply_*.py
+/fix_*.py
+/phase*_prompt.md
+
+# L67 mitigation (Phase 7a Sprint 0 Task G): gh CLI commit-message temp file
+.git_commit_msg.tmp
+
+# pytest-cov artifact
+.coverage
+.coverage.*
+htmlcov/

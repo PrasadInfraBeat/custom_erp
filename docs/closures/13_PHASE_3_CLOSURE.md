@@ -169,8 +169,12 @@ staging/prod (ssh_user=bench_user=erpadmin), re-exec is skipped
 naturally. Estimated fix: <30 lines of bash.
 
 T2. **Hardcoded admin credentials in smoke template** ?
-`templates/smoke.sh.tmpl` has `usr=Administrator&pwd=admin123`. Phase 4
-will source from VM-side secret file once SSH key auth is in place.
+`templates/smoke.sh.tmpl` previously embedded a literal Administrator
+password in the login curl. Sanitized in Phase 6E.1 to read from the
+`$ADMIN_PASSWORD` env var (sourced from the `infrabeat-vm-creds`
+keyring service; see `04_VM_INVENTORY.md` ?VM Credential Setup). Phase
+4 originally planned to source from a VM-side secret file; the keyring
+approach supersedes that.
 
 T3. **Audit hook env var names from Phase 2** ? Phase 2 wrote
 `.claude/hooks/audit_pre.sh` and `audit_post.sh` with best-guess env

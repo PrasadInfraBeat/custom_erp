@@ -1,0 +1,425 @@
+[
+  {
+    "name": "create_document",
+    "description": "Create new Frappe documents with proper validation and child table support. Supports all DocTypes including those with child tables. WORKFLOW: First use get_doctype_info to understand the DocType structure, identify required fields and child tables, then create the document with proper field values. Child tables must be provided as arrays of objects. Referenced records (customers, items, warehouses, etc.) must already exist in the system. Use exact field names as shown in DocType metadata. Error responses include specific guidance for resolution. Common use cases: creating Sales Orders with line items, Purchase Orders with items and taxes, customer records, inventory transactions.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "The Frappe DocType name (e.g., 'Customer', 'Sales Invoice', 'Item', 'User'). Must match exact DocType name in system."
+        },
+        "data": {
+          "type": "object",
+          "description": "Document field data as key-value pairs. Include all required fields for the doctype. Example: {'customer_name': 'ABC Corp', 'customer_type': 'Company'}"
+        },
+        "submit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to submit the document after creation (for submittable doctypes like Sales Invoice). Use true only when explicitly requested."
+        },
+        "validate_only": {
+          "type": "boolean",
+          "default": false,
+          "description": "Only validate the document without saving it. Use this to test data format and required fields before actual creation."
+        }
+      },
+      "required": [
+        "doctype",
+        "data"
+      ]
+    }
+  },
+  {
+    "name": "get_document",
+    "description": "Retrieve detailed information about a specific Frappe document. Use when users ask for details about a particular record they know the name/ID of.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "The Frappe DocType name (e.g., 'Customer', 'Sales Invoice', 'Item')"
+        },
+        "name": {
+          "type": "string",
+          "description": "The document name/ID (e.g., 'CUST-00001', 'SINV-00001'). This is the unique identifier for the document."
+        }
+      },
+      "required": [
+        "doctype",
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "update_document",
+    "description": "Update/modify an existing Frappe document. Use when users want to change field values in an existing record. Always fetch the document first to understand current values.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "The Frappe DocType name (e.g., 'Customer', 'Sales Invoice', 'Item')"
+        },
+        "name": {
+          "type": "string",
+          "description": "The document name/ID to update (e.g., 'CUST-00001', 'SINV-00001')"
+        },
+        "data": {
+          "type": "object",
+          "description": "Field updates as key-value pairs. Only include fields that need to be changed. Example: {'customer_name': 'Updated Corp Name', 'phone': '+1234567890'}"
+        }
+      },
+      "required": [
+        "doctype",
+        "name",
+        "data"
+      ]
+    }
+  },
+  {
+    "name": "list_documents",
+    "description": "Search and list Frappe documents with optional filtering. Use this when users want to find records, get lists of documents, or search for data. This is the primary tool for data exploration and discovery.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "The Frappe DocType to search (e.g., 'Customer', 'Sales Invoice', 'Item', 'User'). Must match exact DocType name."
+        },
+        "filters": {
+          "type": "object",
+          "default": {},
+          "description": "Search filters as key-value pairs. Examples: {'status': 'Active'}, {'customer_type': 'Company'}, {'creation': ['>', '2024-01-01']}. Use empty {} to get all records."
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Specific fields to retrieve. Examples: ['name', 'customer_name', 'email'], ['name', 'item_name', 'item_code']. Leave empty to get standard fields."
+        },
+        "limit": {
+          "type": "integer",
+          "default": 20,
+          "maximum": 1000,
+          "description": "Maximum number of records to return. Default is 20, maximum is 1000."
+        },
+        "order_by": {
+          "type": "string",
+          "description": "Order results by field. Examples: 'creation desc', 'name asc', 'modified desc'. Default is 'creation desc'."
+        }
+      },
+      "required": [
+        "doctype"
+      ]
+    }
+  },
+  {
+    "name": "delete_document",
+    "description": "Delete an existing Frappe document. Use when users want to remove a record from the system. Always check for dependencies before deletion.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "The Frappe DocType name (e.g., 'Customer', 'Sales Invoice', 'Item')"
+        },
+        "name": {
+          "type": "string",
+          "description": "The document name/ID to delete (e.g., 'CUST-00001', 'SINV-00001')"
+        },
+        "force": {
+          "type": "boolean",
+          "default": false,
+          "description": "Force deletion even if there are dependencies. Use with caution."
+        }
+      },
+      "required": [
+        "doctype",
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "submit_document",
+    "description": "Submit a draft document after validation. Only works with documents in draft state (docstatus=0). Use when users want to finalize a document.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "The Frappe DocType name (e.g., 'Customer', 'Sales Invoice', 'Item')"
+        },
+        "name": {
+          "type": "string",
+          "description": "The document name/ID to submit (e.g., 'CUST-00001', 'SINV-00001')"
+        }
+      },
+      "required": [
+        "doctype",
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "search_documents",
+    "description": "Global search across all accessible documents",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query"
+        },
+        "limit": {
+          "type": "integer",
+          "default": 20,
+          "description": "Maximum results"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "search_doctype",
+    "description": "Search within a specific DocType",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "DocType to search in"
+        },
+        "query": {
+          "type": "string",
+          "description": "Search query"
+        },
+        "limit": {
+          "type": "integer",
+          "default": 20,
+          "description": "Maximum results"
+        }
+      },
+      "required": [
+        "doctype",
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "search_link",
+    "description": "Search for link field options",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "Target DocType for link"
+        },
+        "query": {
+          "type": "string",
+          "description": "Search query"
+        },
+        "filters": {
+          "type": "object",
+          "default": {},
+          "description": "Additional filters"
+        }
+      },
+      "required": [
+        "doctype",
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "search",
+    "description": "Search for documents using OpenAI Vector Store search. Returns a list of search results with basic information. Use the fetch tool to get complete document content.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query string. Natural language queries work best for semantic search."
+        }
+      },
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "fetch",
+    "description": "Retrieve complete document content by ID for detailed analysis and citation. Use this after finding relevant documents with the search tool to get complete information for analysis and proper citation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Document ID from search results (format: 'doctype/name', e.g., 'Customer/CUST-00001')"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    }
+  },
+  {
+    "name": "get_doctype_info",
+    "description": "Get DocType metadata and field information",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "DocType name"
+        }
+      },
+      "required": [
+        "doctype"
+      ]
+    }
+  },
+  {
+    "name": "generate_report",
+    "description": "Execute a Frappe report. IMPORTANT: Always call report_requirements(report_name) FIRST to get mandatory filters and valid options, then call this tool with explicit filters. Missing filters are auto-defaulted (dates, company) which often returns empty data. Supports Script Reports, Query Reports, and Custom Reports. Report Builder reports are not supported. Large/prepared reports are handled automatically with polling.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "report_name": {
+          "type": "string",
+          "description": "Exact name of the Frappe report to execute (e.g., 'Accounts Receivable Summary', 'Sales Analytics', 'Stock Balance'). Use report_list to find available reports."
+        },
+        "filters": {
+          "type": "object",
+          "default": {},
+          "description": "Filter key-value pairs. Get valid keys and values from report_requirements first. Dates: YYYY-MM-DD. Link fields (company, customer) must be exact DB names. Select fields must match allowed options exactly."
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "json",
+            "csv",
+            "excel"
+          ],
+          "default": "json",
+          "description": "Output format. Use 'json' for data analysis, 'csv' for exports, 'excel' for spreadsheet files."
+        }
+      },
+      "required": [
+        "report_name"
+      ]
+    }
+  },
+  {
+    "name": "report_list",
+    "description": "Discover and search available Frappe business reports across all modules. Use this tool to find the appropriate report for business questions before attempting custom data analysis. Returns a list of available reports with descriptions, modules, and types. Available reports include Sales Analytics, Territory Analysis, Customer Reports, P&L Statement, Balance Sheet, Receivables/Payables, Inventory Reports, Item Movement, Stock Valuation, Payroll, Attendance, and Leave Reports. Always search for existing reports first before building custom queries or analysis.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "description": "Filter by Frappe module (e.g., 'Accounts', 'Selling', 'Stock', 'HR', 'CRM'). Leave empty to see all modules."
+        },
+        "report_type": {
+          "type": "string",
+          "enum": [
+            "Report Builder",
+            "Query Report",
+            "Script Report"
+          ],
+          "description": "Filter by report type. Script Reports are usually the most powerful for analytics. Leave empty to see all types."
+        }
+      }
+    }
+  },
+  {
+    "name": "report_requirements",
+    "description": "Get report metadata including required and optional filters, columns, and execution requirements for Script Reports, Query Reports, and Custom Reports. Use this tool before executing reports to understand what filters are mandatory, what exact filter values are valid, and how to structure the report request. This prevents filter errors and helps plan successful report execution. Returns complete report metadata including filter definitions with field types (Link, Select, Date), valid enum options for select fields, column structure, report type, and capabilities. IMPORTANT: Use this FIRST before calling generate_report to understand what exact filter values are needed - Link fields require exact database names (e.g., exact Company name, Customer name), Select fields show valid enum values. Essential when generate_report returns filter errors or when planning complex report execution. NOTE: Report Builder reports are not supported as they are simple DocType list views without business logic.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "report_name": {
+          "type": "string",
+          "description": "Exact name of the Frappe report to analyze (e.g., 'Sales Analytics', 'Accounts Receivable Summary'). This helps understand available fields, required filters, valid filter options, and report structure before execution."
+        },
+        "include_metadata": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to include technical metadata (creation date, owner, SQL query, etc.) - useful for developers and administrators."
+        },
+        "include_columns": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to include column structure information."
+        },
+        "include_filters": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to include filter requirements and guidance."
+        }
+      },
+      "required": [
+        "report_name"
+      ]
+    }
+  },
+  {
+    "name": "run_workflow",
+    "description": "Execute workflow actions on documents (Submit, Approve, Reject, etc.). Use this for business process automation - NOT for simple field updates. This tool properly handles workflow permissions, notifications, state transitions, and business rules. Always use this instead of directly updating workflow_state fields, as it ensures proper workflow execution with all side effects (emails, status changes, validations). If action fails, tool shows available actions for current state.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "Document type (e.g., 'Sales Order', 'Purchase Order')"
+        },
+        "name": {
+          "type": "string",
+          "description": "Document name/ID"
+        },
+        "action": {
+          "type": "string",
+          "description": "Exact workflow action name to execute. Common examples: 'Submit', 'Approve', 'Reject', 'Submit for Review', 'Cancel', 'Reopen'. Use the exact action name as defined in the workflow - case sensitive. If unsure of available actions, the tool will show them when it fails."
+        },
+        "workflow": {
+          "type": "string",
+          "description": "Workflow name (optional - will be auto-detected)"
+        }
+      },
+      "required": [
+        "doctype",
+        "name",
+        "action"
+      ]
+    }
+  },
+  {
+    "name": "get_pending_approvals",
+    "description": "Get documents pending the current user's approval. Use this when users ask about pending approvals, documents awaiting action, workflow items needing review, or approval queues. Queries the Workflow Action system \u2014 NOT Todos or Notifications. Returns documents grouped by type with workflow state and available actions (Approve, Reject, etc.).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "doctype": {
+          "type": "string",
+          "description": "Optional: filter to a specific doctype (e.g. 'Purchase Order')."
+        },
+        "limit": {
+          "type": "integer",
+          "default": 50,
+          "maximum": 200,
+          "description": "Maximum number of pending actions to return. Default 50."
+        },
+        "include_actions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to include available workflow actions (Approve, Reject, etc.) for each document. Set to false for faster results on large lists."
+        }
+      },
+      "required": []
+    }
+  }
+]
