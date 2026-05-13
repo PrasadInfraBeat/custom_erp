@@ -95,3 +95,52 @@ def test_promote_flow_constants():
         "staging": ("dev", "staging"),
         "production": ("staging", "production"),
     }
+
+
+# === L87 fix: _filter_failed_checks tests ===
+
+from infrabeat_erp.application.promote import _filter_failed_checks
+
+
+def test_filter_returns_empty_when_all_success():
+    runs = [
+        {"name": "lint", "status": "completed", "conclusion": "success"},
+        {"name": "pytest", "status": "completed", "conclusion": "success"},
+    ]
+    assert _filter_failed_checks(runs) == []
+
+
+def test_filter_passes_through_real_failures():
+    runs = [
+        {"name": "lint", "status": "completed", "conclusion": "success"},
+        {"name": "pytest", "status": "completed", "conclusion": "failure"},
+    ]
+    result = _filter_failed_checks(runs)
+    assert len(result) == 1
+    assert result[0]["name"] == "pytest"
+
+
+def test_filter_excludes_require_approving_review():
+    runs = [
+        {"name": "lint", "status": "completed", "conclusion": "success"},
+        {"name": "Require approving review", "status": "completed", "conclusion": "failure"},
+    ]
+    assert _filter_failed_checks(runs) == []
+
+
+def test_filter_excludes_review_check_case_insensitive():
+    runs = [
+        {"name": "REQUIRE APPROVING REVIEW", "status": "completed", "conclusion": "failure"},
+        {"name": "require approving review", "status": "completed", "conclusion": "failure"},
+    ]
+    assert _filter_failed_checks(runs) == []
+
+
+def test_filter_combines_real_failure_with_policy_gate():
+    runs = [
+        {"name": "Require approving review", "status": "completed", "conclusion": "failure"},
+        {"name": "pytest", "status": "completed", "conclusion": "failure"},
+    ]
+    result = _filter_failed_checks(runs)
+    assert len(result) == 1
+    assert result[0]["name"] == "pytest"
