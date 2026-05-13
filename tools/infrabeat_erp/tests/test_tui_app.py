@@ -134,3 +134,21 @@ def test_promote_target_modal_dismisses_with_button_id(monkeypatch):
 
     modal.on_button_pressed(FakeEvent())
     assert captured == ["production"]
+
+
+def test_action_smoke_pushes_vm_modal(monkeypatch):
+    """action_smoke pushes a VmSelectModal screen with a callback."""
+    from infrabeat_erp.presentation import tui_app
+
+    app = tui_app.InfraBeatApp()
+    pushed = []
+
+    def fake_push(screen, callback=None):
+        pushed.append((type(screen).__name__, callback))
+
+    monkeypatch.setattr(app, "push_screen", fake_push)
+    app.action_smoke()
+
+    assert len(pushed) == 1
+    assert pushed[0][0] == "VmSelectModal"
+    assert pushed[0][1] is not None
