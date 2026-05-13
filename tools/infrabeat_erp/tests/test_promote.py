@@ -144,3 +144,19 @@ def test_filter_combines_real_failure_with_policy_gate():
     result = _filter_failed_checks(runs)
     assert len(result) == 1
     assert result[0]["name"] == "pytest"
+def test_filter_skips_block_direct_pushes_policy_gate():
+    """L94 fix: \'Block direct pushes to protected branches\' is a ruleset policy
+    gate that always fails for orchestrator-driven promotes by design. Filter
+    alongside \'Require approving review\' (L87) so only real CI failures block.
+    """
+    check_runs = [
+        {"name": "Block direct pushes to protected branches", "status": "completed", "conclusion": "failure"},
+        {"name": "Require approving review", "status": "completed", "conclusion": "failure"},
+        {"name": "pytest", "status": "completed", "conclusion": "failure"},
+        {"name": "lint", "status": "completed", "conclusion": "success"},
+    ]
+    failed = _filter_failed_checks(check_runs)
+    failed_names = [cr["name"] for cr in failed]
+    assert failed_names == ["pytest"], (
+        f"Only non-policy-gate failures should be returned. Got: {failed_names}"
+    )
