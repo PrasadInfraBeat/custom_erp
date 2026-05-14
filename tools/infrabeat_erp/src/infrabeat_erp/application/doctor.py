@@ -317,6 +317,76 @@ def check_token_ttl() -> list[CheckResult]:
     return results
 
 
+def check_oauth_client_liveness() -> list[CheckResult]:
+    """Phase 7b Sprint 1 Task 3 (L95): OAuth client liveness probe per VM.
+
+    Uses a 5-second HTTP GET against /.well-known/openid-configuration as a
+    proxy for FAC OAuth readiness + server reachability. Status policy:
+      PASS - HTTP 2xx (FAC alive, OAuth metadata served)
+      INFO - no secrets cached or no client_id in secrets
+      WARN - non-2xx response, timeout, or other network error
+             (suggests stale client registration or service down)
+    Never FAIL: probe failures are advisory, not blocking.
+    """
+    import httpx
+    from infrabeat_erp.infrastructure import config, secrets_store
+    results: list[CheckResult] = []
+    for vm in VMS:
+        name = vm['name']
+        try:
+            secrets = secrets_store.load_secrets(name)
+        except secrets_store.SecretsNotFound:
+            results.append(CheckResult(
+                f'oauth-liveness-{name}', 'INFO',
+                'not registered',
+                f'infrabeat-erp register {name}',
+            ))
+            continue
+        except Exception as exc:
+            results.append(CheckResult(
+                f'oauth-liveness-{name}', 'WARN',
+                f'load_secrets error: {type(exc).__name__}: {exc}',
+            ))
+            continue
+        if not secrets.get('client_id'):
+            results.append(CheckResult(
+                f'oauth-liveness-{name}', 'INFO',
+                'no client_id in cached secrets',
+                f'infrabeat-erp register {name}',
+            ))
+            continue
+        try:
+            vm_config = config.get_vm(name)
+            base_url = vm_config.base_url
+        except Exception as exc:
+            results.append(CheckResult(
+                f'oauth-liveness-{name}', 'WARN',
+                f'config.get_vm failed: {type(exc).__name__}',
+            ))
+            continue
+        try:
+            with httpx.Client(base_url=base_url, timeout=5.0) as client:
+                resp = client.get('/.well-known/openid-configuration')
+            if 200 <= resp.status_code < 300:
+                results.append(CheckResult(
+                    f'oauth-liveness-{name}', 'PASS',
+                    f'OIDC discovery {resp.status_code} ({resp.elapsed.total_seconds():.2f}s)',
+                ))
+            else:
+                results.append(CheckResult(
+                    f'oauth-liveness-{name}', 'WARN',
+                    f'OIDC discovery returned HTTP {resp.status_code}',
+                    f'infrabeat-erp register {name} --force',
+                ))
+        except Exception as exc:
+            results.append(CheckResult(
+                f'oauth-liveness-{name}', 'WARN',
+                f'unreachable: {type(exc).__name__}',
+                f'verify FAC on {vm["host"]} or re-register with --force',
+            ))
+    return results
+
+
 def run_all() -> list[CheckResult]:
     results = []
     for fn in CHECKS:
@@ -352,6 +422,18 @@ def run_all() -> list[CheckResult]:
                 "token-ttl",
                 "FAIL",
                 f"check_token_ttl raised {type(exc).__name__}: {exc}",
+                "internal bug; please report",
+            )
+        )
+    # Phase 7b Sprint 1 Task 3 (L95): OAuth client liveness per VM
+    try:
+        results.extend(check_oauth_client_liveness())
+    except Exception as exc:
+        results.append(
+            CheckResult(
+                "oauth-liveness",
+                "FAIL",
+                f"check_oauth_client_liveness raised {type(exc).__name__}: {exc}",
                 "internal bug; please report",
             )
         )
