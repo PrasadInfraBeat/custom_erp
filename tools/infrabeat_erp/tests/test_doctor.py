@@ -104,14 +104,14 @@ def test_format_results_includes_summary():
     assert "fix it" in output
 
 
-def test_run_all_returns_12_checks():
+def test_run_all_returns_15_checks():
     with patch("infrabeat_erp.application.doctor.keyring.get_password", return_value=None), \
          patch("infrabeat_erp.application.doctor.keyring.get_keyring") as kr_mock, \
          patch("infrabeat_erp.application.doctor.shutil.which", return_value=None):
         kr_mock.return_value.__class__.__module__ = "keyring.backends.Windows"
         kr_mock.return_value.__class__.__name__ = "WinVaultKeyring"
         results = run_all()
-    assert len(results) == 12
+    assert len(results) == 15
 
 
 def test_main_returns_1_if_any_fail(capsys, monkeypatch):
@@ -231,3 +231,30 @@ def test_check_github_pat_returns_pass_when_pat_stored(monkeypatch):
     from infrabeat_erp.application.doctor import check_github_pat
     r = check_github_pat()
     assert r.status == "PASS"
+# === Phase 7b Sprint 1 Task 3 tests ===========================================
+def test_check_oauth_client_liveness_returns_one_per_vm():
+    """L95: liveness check returns exactly one CheckResult per VM."""
+    from infrabeat_erp.application.doctor import check_oauth_client_liveness, VMS
+    results = check_oauth_client_liveness()
+    assert len(results) == len(VMS)
+    names = [r.name for r in results]
+    for vm in VMS:
+        assert f'oauth-liveness-{vm["name"]}' in names
+
+
+def test_check_oauth_client_liveness_status_in_valid_set():
+    """L95: every liveness CheckResult has a recognized status."""
+    from infrabeat_erp.application.doctor import check_oauth_client_liveness
+    results = check_oauth_client_liveness()
+    valid = {'PASS', 'WARN', 'INFO'}
+    for r in results:
+        assert r.status in valid, f'{r.name}: bad status {r.status!r}'
+
+
+def test_register_has_force_option():
+    """L95: register subcommand exposes a --force boolean option."""
+    from infrabeat_erp.cli import register
+    param_names = [p.name for p in register.params]
+    assert 'force' in param_names, f'register params: {param_names}'
+    force_param = next(p for p in register.params if p.name == 'force')
+    assert force_param.is_flag is True

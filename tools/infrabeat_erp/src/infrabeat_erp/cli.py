@@ -52,7 +52,13 @@ from infrabeat_erp.infrastructure.secrets_store import SecretsNotFound
 
 @main.command()
 @click.argument("vm_alias")
-def register(vm_alias: str) -> None:
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Bypass already-registered guard and mint a fresh OAuth client.",
+)
+def register(vm_alias: str, force: bool) -> None:
     """Discover OAuth metadata and register a dynamic client for VM_ALIAS."""
     _ensure_production_allowed(vm_alias)
     try:
