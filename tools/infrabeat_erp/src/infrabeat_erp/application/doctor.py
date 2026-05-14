@@ -261,6 +261,62 @@ def check_vm_ssh() -> list[CheckResult]:
     return results
 
 
+def check_token_ttl() -> list[CheckResult]:
+    """Phase 7b Sprint 1 Task 2 (L92): report access_token TTL per VM.
+
+    Reads cached OAuth tokens via secrets_store.load_secrets and computes
+    remaining seconds against (issued_at + expires_in - now). Returns one
+    CheckResult per VM in VMS. Status policy:
+      INFO  - no cached secrets, or token lacks expiry metadata, or TTL > 5 min
+      WARN  - TTL in (0, 5 min] minutes or already expired
+    Never FAIL; absent tokens are normal pre-login state.
+    """
+    from infrabeat_erp.application.auth_retry import token_ttl_seconds
+    from infrabeat_erp.infrastructure import secrets_store
+    results: list[CheckResult] = []
+    for vm in VMS:
+        name = vm['name']
+        try:
+            secrets = secrets_store.load_secrets(name)
+        except secrets_store.SecretsNotFound:
+            results.append(CheckResult(
+                f'token-ttl-{name}', 'INFO',
+                'no cached secrets',
+                f'infrabeat-erp login {name}',
+            ))
+            continue
+        except Exception as exc:
+            results.append(CheckResult(
+                f'token-ttl-{name}', 'WARN',
+                f'load_secrets error: {type(exc).__name__}: {exc}',
+            ))
+            continue
+        ttl = token_ttl_seconds(secrets)
+        if ttl is None:
+            results.append(CheckResult(
+                f'token-ttl-{name}', 'INFO',
+                'token has no issued_at/expires_in fields',
+            ))
+        elif ttl < 0:
+            results.append(CheckResult(
+                f'token-ttl-{name}', 'WARN',
+                f'expired {abs(ttl) // 60} min ago',
+                f'infrabeat-erp login {name}',
+            ))
+        elif ttl < 300:
+            results.append(CheckResult(
+                f'token-ttl-{name}', 'WARN',
+                f'{ttl // 60} min remaining (refresh soon)',
+                f'infrabeat-erp login {name}',
+            ))
+        else:
+            results.append(CheckResult(
+                f'token-ttl-{name}', 'INFO',
+                f'{ttl // 60} min remaining',
+            ))
+    return results
+
+
 def run_all() -> list[CheckResult]:
     results = []
     for fn in CHECKS:
@@ -284,6 +340,18 @@ def run_all() -> list[CheckResult]:
                 "vm-ssh",
                 "FAIL",
                 f"check_vm_ssh raised {type(exc).__name__}: {exc}",
+                "internal bug; please report",
+            )
+        )
+    # Phase 7b Sprint 1 Task 2 (L92): per-VM token TTL
+    try:
+        results.extend(check_token_ttl())
+    except Exception as exc:
+        results.append(
+            CheckResult(
+                "token-ttl",
+                "FAIL",
+                f"check_token_ttl raised {type(exc).__name__}: {exc}",
                 "internal bug; please report",
             )
         )
