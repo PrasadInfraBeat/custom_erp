@@ -104,14 +104,14 @@ def test_format_results_includes_summary():
     assert "fix it" in output
 
 
-def test_run_all_returns_9_checks():
+def test_run_all_returns_12_checks():
     with patch("infrabeat_erp.application.doctor.keyring.get_password", return_value=None), \
          patch("infrabeat_erp.application.doctor.keyring.get_keyring") as kr_mock, \
          patch("infrabeat_erp.application.doctor.shutil.which", return_value=None):
         kr_mock.return_value.__class__.__module__ = "keyring.backends.Windows"
         kr_mock.return_value.__class__.__name__ = "WinVaultKeyring"
         results = run_all()
-    assert len(results) == 9
+    assert len(results) == 12
 
 
 def test_main_returns_1_if_any_fail(capsys, monkeypatch):
